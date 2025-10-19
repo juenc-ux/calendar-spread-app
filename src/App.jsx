@@ -3,6 +3,8 @@ import { Info, Calendar, Download, Moon, Sun } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+const DEFAULT_POLYGON_KEY = 'RJpiUFxkzRIgH5m_woErYxupAJD5fBFq';
+
 export default function ForwardVolCalculator() {
   const [date1, setDate1] = useState('2025-10-24');
   const [date2, setDate2] = useState('2025-10-31');
@@ -25,9 +27,10 @@ export default function ForwardVolCalculator() {
   const [ticker, setTicker] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('polygonKey') || '');
+  const [apiKey, setApiKey] = useState(localStorage.getItem('polygonKey') || DEFAULT_POLYGON_KEY);
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
   const [filteredTickers, setFilteredTickers] = useState([]);
+  const [optionStats, setOptionStats] = useState({ exp1: null, exp2: null });
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -129,6 +132,24 @@ export default function ForwardVolCalculator() {
     setIv2('11.8');
     setRiskFreeRate('4.5');
     setDividend('1.2');
+    setOptionStats({
+      exp1: {
+        expiration: '2025-10-24',
+        strike: 580,
+        ticker: 'SPY251024C00580000',
+        iv: 0.125,
+        volume: 18250,
+        openInterest: 96540,
+      },
+      exp2: {
+        expiration: '2025-10-31',
+        strike: 580,
+        ticker: 'SPY251031C00580000',
+        iv: 0.118,
+        volume: 15400,
+        openInterest: 84210,
+      },
+    });
 
     // Auto-calculate
     setTimeout(() => calculateResults(), 100);
@@ -208,39 +229,129 @@ export default function ForwardVolCalculator() {
       const roundedStrike = Math.round(currentPrice / 5) * 5;
       setStrikePrice(roundedStrike.toFixed(2));
 
-      // 4. Try to get options data (if available in your plan)
-      // Free tier doesn't have options, but we'll try anyway
+      // 4. Fetch ATM option stats (IV, volume, open interest) for the next two expirations
+      setOptionStats({ exp1: null, exp2: null });
       try {
-        const optionsUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${apiKey}`;
-        console.log('Trying to fetch options data...');
+        const optionsUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?contract_type=call&include_greeks=true&limit=1000&apiKey=${apiKey}`;
+        console.log('Trying to fetch detailed options data...');
 
         const optionsResponse = await fetch(optionsUrl);
 
-        if (optionsResponse.ok) {
-          const optionsData = await optionsResponse.json();
-          console.log('Options data:', optionsData);
-
-          if (optionsData.results && optionsData.results.length > 0) {
-            // Find ATM options if available
-            const atmOptions = optionsData.results.filter(opt =>
-              Math.abs(opt.details.strike_price - currentPrice) < 10
-            );
-
-            if (atmOptions.length > 0 && atmOptions[0].implied_volatility) {
-              setIv1((atmOptions[0].implied_volatility * 100).toFixed(2));
-              setIv2(((atmOptions[0].implied_volatility * 0.95) * 100).toFixed(2));
-              console.log('✅ Got IV from Polygon options data!');
-            } else {
-              throw new Error('No IV in response');
-            }
-          } else {
-            throw new Error('No options results');
-          }
-        } else {
-          throw new Error('Options endpoint not available');
+        if (!optionsResponse.ok) {
+          throw new Error('Options endpoint returned an error');
         }
+
+        const optionsData = await optionsResponse.json();
+        console.log('Options data:', optionsData);
+
+        if (!optionsData.results || optionsData.results.length === 0) {
+          throw new Error('No options snapshot results');
+        }
+
+        const callOptions = optionsData.results.filter(opt =>
+          (opt.details?.contract_type || opt.contract_type || '').toLowerCase() === 'call'
+        );
+
+        if (callOptions.length === 0) {
+          throw new Error('No call options returned');
+        }
+
+        const groupedByExpiration = callOptions.reduce((acc, opt) => {
+          const exp = opt.details?.expiration_date || opt.expiration_date;
+          if (!exp) return acc;
+          if (!acc[exp]) acc[exp] = [];
+          acc[exp].push(opt);
+          return acc;
+        }, {});
+
+        const midnightToday = new Date();
+        midnightToday.setHours(0, 0, 0, 0);
+
+        const sortedExpirations = Object.keys(groupedByExpiration)
+          .map(date => ({ date, timestamp: new Date(date).getTime() }))
+          .filter(item => !Number.isNaN(item.timestamp) && item.timestamp >= midnightToday.getTime())
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .map(item => item.date);
+
+        if (sortedExpirations.length === 0) {
+          throw new Error('No future expirations available');
+        }
+
+        const getNearestOption = (expiration) => {
+          const candidates = groupedByExpiration[expiration] || [];
+          if (candidates.length === 0) return null;
+          return candidates
+            .slice()
+            .sort((a, b) => {
+              const strikeA = a.details?.strike_price ?? a.strike_price ?? 0;
+              const strikeB = b.details?.strike_price ?? b.strike_price ?? 0;
+              return Math.abs(strikeA - currentPrice) - Math.abs(strikeB - currentPrice);
+            })[0];
+        };
+
+        const firstExpiration = sortedExpirations[0];
+        const secondExpiration = sortedExpirations.find(exp => exp !== firstExpiration);
+
+        const option1 = getNearestOption(firstExpiration);
+        const option2 = secondExpiration ? getNearestOption(secondExpiration) : null;
+
+        const parseOptionSnapshot = (option) => {
+          if (!option) return null;
+          const expiration = option.details?.expiration_date || option.expiration_date || null;
+          const strike = option.details?.strike_price ?? option.strike_price ?? null;
+          const tickerSymbol = option.details?.ticker || option.ticker || option.option_symbol || null;
+          const ivRaw = option.implied_volatility
+            ?? option.greeks?.mid_iv
+            ?? option.greeks?.mark_iv
+            ?? option.greeks?.iv
+            ?? option.last_quote?.implied_volatility
+            ?? null;
+          const volume = option.day?.volume ?? option.last_quote?.volume ?? null;
+          const openInterest = option.open_interest ?? option.day?.open_interest ?? null;
+
+          return {
+            expiration,
+            strike: strike != null ? Number(strike) : null,
+            ticker: tickerSymbol,
+            iv: ivRaw != null ? Number(ivRaw) : null,
+            volume: volume != null ? Number(volume) : null,
+            openInterest: openInterest != null ? Number(openInterest) : null,
+          };
+        };
+
+        const exp1Data = parseOptionSnapshot(option1);
+        const exp2Data = parseOptionSnapshot(option2);
+
+        if (!exp1Data || exp1Data.iv == null) {
+          throw new Error('Missing IV for the nearest expiration');
+        }
+
+        if (exp1Data.expiration) {
+          setDate1(exp1Data.expiration);
+        }
+
+        if (exp2Data?.expiration) {
+          setDate2(exp2Data.expiration);
+        }
+
+        if (exp1Data.strike != null) {
+          setStrikePrice(exp1Data.strike.toFixed(2));
+        }
+
+        setIv1((exp1Data.iv * 100).toFixed(2));
+
+        if (exp2Data && exp2Data.iv != null) {
+          setIv2((exp2Data.iv * 100).toFixed(2));
+        } else {
+          console.log('Second expiration IV missing, reusing front expiration IV');
+          setIv2((exp1Data.iv * 100).toFixed(2));
+        }
+
+        setOptionStats({ exp1: exp1Data, exp2: exp2Data });
+        console.log('✅ Got IV and option stats from Polygon snapshot API');
       } catch (optError) {
-        console.log('Options data not available (expected with free tier), using defaults');
+        console.log('Options data unavailable, falling back to defaults:', optError.message);
+        setOptionStats({ exp1: null, exp2: null });
         // Use reasonable defaults based on historical volatility
         setIv1('30');
         setIv2('28');
@@ -902,12 +1013,65 @@ export default function ForwardVolCalculator() {
                       type="number"
                       value={field.value}
                       onChange={(e) => field.setter(e.target.value)}
-                      className={baseInputClass}
-                      step="0.01"
+                      className={`${baseInputClass}`}
+                      step="any"
                     />
                   </div>
                 ))}
               </div>
+
+              {(optionStats.exp1 || optionStats.exp2) && (
+                <div className={`${softCardClass} mt-4 rounded-2xl border border-sky-400/20 p-4`}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-sky-400">ATM Option Snapshot</h3>
+                  {['exp1', 'exp2'].map((key, idx) => {
+                    const data = optionStats[key];
+                    if (!data) return null;
+
+                    const volumeDisplay = data.volume != null ? data.volume.toLocaleString() : '—';
+                    const openInterestDisplay = data.openInterest != null ? data.openInterest.toLocaleString() : '—';
+                    const ivDisplay = data.iv != null ? `${(data.iv * 100).toFixed(2)}%` : '—';
+
+                    return (
+                      <div
+                        key={key}
+                        className={`${idx > 0 ? 'mt-4 border-t pt-4' : 'mt-3'} ${darkMode ? 'border-slate-700' : 'border-white/60'}`}
+                      >
+                        <div className="flex items-center justify-between text-sm font-semibold">
+                          <span>{idx === 0 ? 'Expiration 1' : 'Expiration 2'}</span>
+                          <span>{data.expiration ? new Date(data.expiration).toLocaleDateString('en-US') : '—'}</span>
+                        </div>
+                        <div className={`mt-2 grid grid-cols-2 gap-3 text-xs ${subtleTextClass}`}>
+                          <div className="space-y-1">
+                            <p>
+                              Ticker: <span className="font-semibold text-sky-400/80">{data.ticker || '—'}</span>
+                            </p>
+                            <p>
+                              Strike:{' '}
+                              <span className="font-semibold text-sky-400/80">
+                                {data.strike != null ? data.strike.toFixed(2) : '—'}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <p>
+                              IV: <span className="font-semibold text-sky-400/80">{ivDisplay}</span>
+                            </p>
+                            <p>
+                              Volume: <span className="font-semibold text-sky-400/80">{volumeDisplay}</span>
+                            </p>
+                          </div>
+                          <div className="col-span-2">
+                            <p>
+                              Open Interest:{' '}
+                              <span className="font-semibold text-sky-400/80">{openInterestDisplay}</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <button onClick={calculateResults} className={primaryButtonClass}>
                 Calculate
