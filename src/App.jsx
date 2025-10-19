@@ -383,7 +383,7 @@ export default function ForwardVolCalculator() {
     return (
       <div className={`absolute ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-blue-300'} border-2 rounded-lg p-4 z-50 shadow-lg max-h-96 overflow-y-auto w-64`}>
         <div className="flex justify-between items-center mb-4 sticky top-0 bg-inherit">
-          <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Nächste 50 Freitag</h3>
+          <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Next 50 Fridays</h3>
           <button onClick={() => setShow(false)} className={`hover:opacity-70 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>✕</button>
         </div>
 
