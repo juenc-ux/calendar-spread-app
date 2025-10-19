@@ -159,7 +159,6 @@ export default function ForwardVolCalculator() {
       const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      const dateStr = yesterday.toISOString().split('T')[0];
 
       const quoteUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${apiKey}`;
       console.log('Fetching quote from Polygon.io...');
@@ -259,20 +258,6 @@ export default function ForwardVolCalculator() {
       setLoadError(error.message || 'Failed to load option data');
       setLoading(false);
     }
-  };
-
-  const getNextFridays = () => {
-    const today = new Date();
-    let fridays = [];
-    let currentDate = new Date(today);
-
-    while (fridays.length < 50) {
-      if (currentDate.getDay() === 5) {
-        fridays.push(new Date(currentDate));
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return fridays;
   };
 
   const normDist = (x) => {
@@ -638,8 +623,8 @@ export default function ForwardVolCalculator() {
                   setShow(false);
                 }}
                 className={`w-full text-left px-3 py-2 rounded text-sm font-semibold transition-all ${
-                  isSelected 
-                    ? 'bg-blue-600 text-white' 
+                  isSelected
+                    ? 'bg-blue-600 text-white'
                     : darkMode
                     ? 'bg-gray-700 text-yellow-300 hover:bg-gray-600'
                     : 'bg-yellow-100 text-gray-900 hover:bg-yellow-200'
@@ -656,9 +641,15 @@ export default function ForwardVolCalculator() {
 
   const getFFColor = (ff) => {
     const ffNum = parseFloat(ff);
-    if (ffNum >= 30) return 'bg-green-100 border-green-500 text-green-900';
-    if (ffNum >= 16) return 'bg-yellow-100 border-yellow-500 text-yellow-900';
-    return darkMode ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-300 text-gray-900';
+    if (ffNum >= 30) return darkMode
+      ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+      : 'bg-emerald-100 border-emerald-400 text-emerald-700';
+    if (ffNum >= 16) return darkMode
+      ? 'bg-amber-500/20 border-amber-400/60 text-amber-200'
+      : 'bg-amber-100 border-amber-400 text-amber-700';
+    return darkMode
+      ? 'bg-slate-800/60 border-slate-700 text-slate-200'
+      : 'bg-slate-100 border-slate-200 text-slate-600';
   };
 
   const chartData = [
@@ -669,7 +660,7 @@ export default function ForwardVolCalculator() {
 
   const exportCSV = () => {
     if (!result || result.error) return;
-    
+
     const csv = [
       ['Calendar Spread Trade'],
       ['Datum', new Date().toLocaleString('de-DE')],
@@ -697,458 +688,504 @@ export default function ForwardVolCalculator() {
     a.click();
   };
 
-  const bgClass = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
-  const cardClass = darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900';
-  const borderClass = darkMode ? 'border-gray-700' : 'border-gray-200';
+  const bgClass = darkMode
+    ? 'bg-slate-950 text-slate-100'
+    : 'bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-100 text-slate-900';
+  const cardClass = darkMode
+    ? 'bg-slate-950/60 text-slate-100 border border-slate-800/70'
+    : 'bg-white/60 text-slate-900 border border-white/70';
+  const subtleText = darkMode ? 'text-slate-400' : 'text-slate-600';
+  const inputBase = darkMode
+    ? 'bg-slate-900/50 border border-slate-700/70 text-slate-100 placeholder-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30'
+    : 'bg-white/70 border border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20';
+  const panelBase = darkMode
+    ? 'bg-slate-900/70 border border-slate-800/80'
+    : 'bg-white/80 border border-white/80';
+  const miniPanelBase = darkMode
+    ? 'bg-slate-900/60 border border-slate-800/70'
+    : 'bg-white/75 border border-slate-200/70';
+  const gradientButton =
+    'bg-gradient-to-r from-indigo-500 via-purple-500 to-sky-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-glow hover:-translate-y-0.5';
 
   return (
-    <div className={`min-h-screen ${bgClass} p-6`}>
-      <div className="max-w-6xl mx-auto">
-        <div className={`${cardClass} rounded-lg shadow-lg p-8`}>
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">Calendar Spread Calculator</h1>
-              <p className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Forward Volatility, Forward Factor & Calendar Spread Pricing</p>
-            </div>
-            <div className="flex gap-3">
-              <select
-                value={pricingModel}
-                onChange={(e) => setPricingModel(e.target.value)}
-                className={`px-4 py-2 rounded-lg font-semibold ${
-                  darkMode
-                    ? 'bg-gray-700 border border-gray-600 text-white'
-                    : 'bg-white border border-blue-300 text-gray-900'
-                }`}
-              >
-                <option value="blackscholes">Black-Scholes</option>
-                <option value="black76">Black-76</option>
-                <option value="binomial">Binomial</option>
-              </select>
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-gray-800'}`}
-              >
-                {darkMode ? <Sun size={24} /> : <Moon size={24} />}
-              </button>
-            </div>
-          </div>
+    <div className={`relative min-h-screen ${bgClass} transition-colors duration-500`}>
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className={`absolute inset-0 opacity-90 ${darkMode ? 'bg-aurora-dark' : 'bg-aurora-light'}`} />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.12),transparent_65%)]" />
+      </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="lg:col-span-1 space-y-4">
-              <h2 className="text-lg font-bold mb-4">Parameters</h2>
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className={`${cardClass} relative overflow-hidden rounded-3xl backdrop-blur-2xl shadow-2xl`}>
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-sky-500" />
 
-              <div>
-                <label className="block text-sm font-semibold mb-2">Polygon.io API Key</label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                    darkMode
-                      ? 'bg-gray-700 border-gray-600 focus:border-blue-400'
-                      : 'bg-white border-blue-300 focus:border-blue-500'
-                  }`}
-                  placeholder="Paste your Polygon.io API key"
-                />
-                <a
-                  href="https://polygon.io/dashboard/signup"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-500 hover:underline mt-1 block"
-                >
-                  Get free API key → (End-of-Day data)
-                </a>
-              </div>
-
-              <div className="relative">
-                <label className="block text-sm font-semibold mb-2">Ticker Symbol</label>
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      value={ticker}
-                      onChange={(e) => handleTickerChange(e.target.value)}
-                      onFocus={() => {
-                        if (ticker.length > 0) {
-                          handleTickerChange(ticker);
-                        }
-                      }}
-                      onBlur={() => {
-                        // Delay to allow click on dropdown
-                        setTimeout(() => setShowTickerDropdown(false), 200);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          setShowTickerDropdown(false);
-                          fetchOptionData(ticker);
-                        } else if (e.key === 'Escape') {
-                          setShowTickerDropdown(false);
-                        }
-                      }}
-                      className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                        darkMode
-                          ? 'bg-gray-700 border-gray-600 focus:border-blue-400'
-                          : 'bg-white border-blue-300 focus:border-blue-500'
-                      }`}
-                      placeholder="e.g. AAPL, SPY, TSLA..."
-                      disabled={loading}
-                    />
-                    {showTickerDropdown && filteredTickers.length > 0 && (
-                      <div className={`absolute z-50 w-full mt-1 max-h-64 overflow-y-auto rounded-lg shadow-lg border-2 ${
-                        darkMode
-                          ? 'bg-gray-800 border-gray-600'
-                          : 'bg-white border-gray-300'
-                      }`}>
-                        {filteredTickers.map((stock) => (
-                          <button
-                            key={stock.symbol}
-                            onClick={() => selectTicker(stock.symbol)}
-                            className={`w-full text-left px-4 py-2 hover:bg-opacity-80 transition-colors ${
-                              darkMode
-                                ? 'hover:bg-gray-700 text-white'
-                                : 'hover:bg-gray-100 text-gray-900'
-                            }`}
-                          >
-                            <div className="font-bold">{stock.symbol}</div>
-                            <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {stock.name}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => fetchOptionData(ticker)}
-                    disabled={loading}
-                    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                      loading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : darkMode
-                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-purple-500 hover:bg-purple-600 text-white'
-                    }`}
-                  >
-                    {loading ? '...' : 'Load'}
-                  </button>
+          <div className="relative p-8 sm:p-10 lg:p-12 space-y-12">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1 text-xs font-semibold uppercase tracking-widest text-indigo-500">
+                  <Info size={16} />
+                  Professional Calendar Analytics
                 </div>
-                {loadError && (
-                  <p className="text-red-500 text-xs mt-1">{loadError}</p>
-                )}
-                {loading && (
-                  <p className={`text-xs mt-1 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                    Loading stock data...
+                <div className="space-y-3">
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">Calendar Spread Intelligence</h1>
+                  <p className={`max-w-2xl text-sm sm:text-base leading-relaxed ${subtleText}`}>
+                    Modellieren Sie Forward Volatility, Forward Factor und Kalender-Spread-Pricing in einer eleganten, datenzentrierten Oberfläche.
+                    Entdecken Sie Szenarien, vergleichen Sie Modelle und exportieren Sie Insights in Sekunden.
                   </p>
-                )}
-                <button
-                  onClick={loadDemoData}
-                  className={`w-full mt-2 px-4 py-2 rounded-lg font-semibold text-xs ${
-                    darkMode
-                      ? 'bg-green-700 hover:bg-green-800 text-white'
-                      : 'bg-green-500 hover:bg-green-600 text-white'
-                  }`}
-                >
-                  Load Demo Data (SPY)
-                </button>
-              </div>
-
-              <div className="relative">
-                <label className="block text-sm font-semibold mb-2">Expiration 1</label>
-                <button
-                  onClick={() => { setShowCalendar1(true); setShowCalendar2(false); }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg flex items-center justify-between ${
-                    darkMode 
-                      ? 'bg-gray-700 border-gray-600 hover:border-blue-400' 
-                      : 'bg-white border-blue-300 hover:border-blue-500'
-                  }`}
-                >
-                  <span>{new Date(date1).toLocaleDateString('en-US')}</span>
-                  <Calendar className="w-5 h-5" />
-                </button>
-                {renderCalendar(date1, setDate1, showCalendar1, setShowCalendar1)}
-              </div>
-
-              <div className="relative">
-                <label className="block text-sm font-semibold mb-2">Expiration 2</label>
-                <button
-                  onClick={() => { setShowCalendar2(true); setShowCalendar1(false); }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg flex items-center justify-between ${
-                    darkMode 
-                      ? 'bg-gray-700 border-gray-600 hover:border-blue-400' 
-                      : 'bg-white border-blue-300 hover:border-blue-500'
-                  }`}
-                >
-                  <span>{new Date(date2).toLocaleDateString('en-US')}</span>
-                  <Calendar className="w-5 h-5" />
-                </button>
-                {renderCalendar(date2, setDate2, showCalendar2, setShowCalendar2)}
-              </div>
-
-              {[
-                { label: 'IV Exp 1 (%)', value: iv1, setter: setIv1 },
-                { label: 'IV Exp 2 (%)', value: iv2, setter: setIv2 },
-                { label: 'Stock Price', value: spotPrice, setter: setSpotPrice },
-                { label: 'Strike', value: strikePrice, setter: setStrikePrice },
-                { label: 'Risk-Free Rate (%)', value: riskFreeRate, setter: setRiskFreeRate },
-                { label: 'Dividend (%)', value: dividend, setter: setDividend }
-              ].map((field, idx) => (
-                <div key={idx}>
-                  <label className="block text-sm font-semibold mb-2">{field.label}</label>
-                  <input
-                    type="number"
-                    value={field.value}
-                    onChange={(e) => field.setter(e.target.value)}
-                    className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                      darkMode
-                        ? 'bg-gray-700 border-gray-600 focus:border-blue-400'
-                        : 'bg-white border-blue-300 focus:border-blue-500'
-                    }`}
-                    step="0.01"
-                  />
                 </div>
-              ))}
+              </div>
 
-              <button
-                onClick={calculateResults}
-                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-3 rounded-lg hover:shadow-lg transition-all transform hover:scale-105"
-              >
-                Calculate
-              </button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                <div className={`${miniPanelBase} rounded-2xl px-4 py-3 shadow-lg backdrop-blur-xl`}>
+                  <p className={`text-xs uppercase tracking-wide ${subtleText}`}>Pricing Model</p>
+                  <select
+                    value={pricingModel}
+                    onChange={(e) => setPricingModel(e.target.value)}
+                    className={`${inputBase} mt-2 w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold focus:outline-none`}
+                  >
+                    <option value="blackscholes">Black-Scholes</option>
+                    <option value="black76">Black-76</option>
+                    <option value="binomial">Binomial</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`${miniPanelBase} rounded-2xl px-4 py-3 flex items-center justify-center shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5`}
+                  aria-label="Toggle color mode"
+                >
+                  {darkMode ? <Sun size={22} className="text-amber-300" /> : <Moon size={22} className="text-indigo-500" />}
+                </button>
+              </div>
             </div>
 
-            <div className="lg:col-span-3 space-y-4">
-              {result && (
-                <>
-                  {result.error ? (
-                    <div className={`border-2 border-red-500 p-6 rounded-lg ${darkMode ? 'bg-red-900 text-red-100' : 'bg-red-50 text-red-900'}`}>
-                      <p className="font-semibold">{result.error}</p>
+            <div className="grid gap-10 xl:grid-cols-[360px_1fr]">
+              <div className="space-y-6">
+                <section className={`${panelBase} rounded-3xl p-6 sm:p-7 backdrop-blur-xl shadow-xl space-y-6`}>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold">Marktdaten</h2>
+                    <span className={`text-xs font-semibold tracking-wide ${subtleText}`}>Live &amp; Demo Inputs</span>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="space-y-3">
+                      <label className="text-xs font-semibold uppercase tracking-wide">Polygon.io API Key</label>
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        className={`${inputBase} w-full rounded-xl px-4 py-3 transition-all duration-300`}
+                        placeholder="Paste your Polygon.io API key"
+                      />
+                      <a
+                        href="https://polygon.io/dashboard/signup"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-indigo-500 hover:text-indigo-400 transition-colors"
+                      >
+                        Get your free Polygon key ↗
+                      </a>
                     </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className={`border-2 border-green-500 p-4 rounded-lg ${darkMode ? 'bg-green-900 text-green-100' : 'bg-green-50 text-green-900'}`}>
-                          <p className="text-xs mb-1 opacity-75">Forward Volatility</p>
-                          <p className="text-3xl font-bold">{result.forwardVolPct}%</p>
-                          <p className="text-xs mt-2 opacity-75">{result.daysToExp1}-{result.daysToExp2} DTE</p>
+
+                    <div className="space-y-3">
+                      <label className="text-xs font-semibold uppercase tracking-wide">Ticker Symbol</label>
+                      <div className="flex gap-3">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={ticker}
+                            onChange={(e) => handleTickerChange(e.target.value)}
+                            onFocus={() => {
+                              if (ticker.length > 0) {
+                                handleTickerChange(ticker);
+                              }
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => setShowTickerDropdown(false), 200);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                setShowTickerDropdown(false);
+                                fetchOptionData(ticker);
+                              } else if (e.key === 'Escape') {
+                                setShowTickerDropdown(false);
+                              }
+                            }}
+                            className={`${inputBase} w-full rounded-xl px-4 py-3 transition-all duration-300`}
+                            placeholder="e.g. AAPL, SPY, TSLA..."
+                            disabled={loading}
+                          />
+                          {showTickerDropdown && filteredTickers.length > 0 && (
+                            <div className={`${miniPanelBase} absolute left-0 right-0 z-50 mt-2 max-h-64 overflow-y-auto rounded-2xl backdrop-blur-xl shadow-2xl`}>
+                              {filteredTickers.map((stock) => (
+                                <button
+                                  key={stock.symbol}
+                                  onClick={() => selectTicker(stock.symbol)}
+                                  className={`w-full px-4 py-2 text-left transition-colors duration-200 first:rounded-t-2xl last:rounded-b-2xl ${darkMode ? 'hover:bg-slate-800/80 text-slate-100' : 'hover:bg-indigo-50/80 text-slate-900'}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-semibold">{stock.symbol}</span>
+                                    <span className={`text-xs ${subtleText}`}>{stock.name}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        
-                        <div className={`border-4 p-4 rounded-lg ${getFFColor(result.forwardFactor)}`}>
-                          <p className="text-xs mb-1 opacity-75">Forward Faktor</p>
-                          <p className="text-3xl font-bold">{result.forwardFactor}%</p>
-                          <p className="text-xs mt-2 opacity-75">
-                            {parseFloat(result.forwardFactor) >= 30 ? '✓ Excellent' : parseFloat(result.forwardFactor) >= 16 ? '✓ Good' : 'Below threshold'}
+
+                        <button
+                          onClick={() => fetchOptionData(ticker)}
+                          disabled={loading}
+                          className={`${gradientButton} inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-transform duration-300 disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          {loading ? (
+                            <span className="flex items-center gap-2">
+                              <span className="h-2 w-2 animate-ping rounded-full bg-white" />
+                              Loading
+                            </span>
+                          ) : (
+                            <>
+                              <Download size={16} className="opacity-90" />
+                              Load
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {loadError && <p className="text-xs font-semibold text-rose-400">{loadError}</p>}
+                      {loading && !loadError && <p className={`text-xs font-medium ${subtleText}`}>Fetching latest aggregated pricing…</p>}
+                      <button
+                        onClick={loadDemoData}
+                        className={`${miniPanelBase} w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5`}
+                      >
+                        Load Demo Data (SPY)
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className={`${panelBase} rounded-3xl p-6 sm:p-7 backdrop-blur-xl shadow-xl space-y-5`}>
+                  <h3 className="text-xl font-semibold">Strategieparameter</h3>
+
+                  <div className="space-y-5">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide">Expiration 1</label>
+                        <button
+                          onClick={() => { setShowCalendar1(true); setShowCalendar2(false); }}
+                          className={`${miniPanelBase} w-full rounded-2xl px-4 py-3 flex items-center justify-between transition-all duration-300 hover:-translate-y-0.5`}
+                        >
+                          <div className="text-left">
+                            <p className={`text-xs uppercase tracking-wide ${subtleText}`}>First Leg</p>
+                            <p className="mt-1 text-sm font-semibold">{new Date(date1).toLocaleDateString('en-US')}</p>
+                          </div>
+                          <Calendar className="w-5 h-5 text-indigo-400" />
+                        </button>
+                        {renderCalendar(date1, setDate1, showCalendar1, setShowCalendar1)}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide">Expiration 2</label>
+                        <button
+                          onClick={() => { setShowCalendar2(true); setShowCalendar1(false); }}
+                          className={`${miniPanelBase} w-full rounded-2xl px-4 py-3 flex items-center justify-between transition-all duration-300 hover:-translate-y-0.5`}
+                        >
+                          <div className="text-left">
+                            <p className={`text-xs uppercase tracking-wide ${subtleText}`}>Second Leg</p>
+                            <p className="mt-1 text-sm font-semibold">{new Date(date2).toLocaleDateString('en-US')}</p>
+                          </div>
+                          <Calendar className="w-5 h-5 text-indigo-400" />
+                        </button>
+                        {renderCalendar(date2, setDate2, showCalendar2, setShowCalendar2)}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4">
+                      {[
+                        { label: 'IV Exp 1 (%)', value: iv1, setter: setIv1 },
+                        { label: 'IV Exp 2 (%)', value: iv2, setter: setIv2 },
+                        { label: 'Stock Price', value: spotPrice, setter: setSpotPrice },
+                        { label: 'Strike', value: strikePrice, setter: setStrikePrice },
+                        { label: 'Risk-Free Rate (%)', value: riskFreeRate, setter: setRiskFreeRate },
+                        { label: 'Dividend (%)', value: dividend, setter: setDividend }
+                      ].map((field) => (
+                        <div key={field.label} className="space-y-2">
+                          <label className="text-xs font-semibold uppercase tracking-wide">{field.label}</label>
+                          <input
+                            type="number"
+                            value={field.value}
+                            onChange={(e) => field.setter(e.target.value)}
+                            className={`${inputBase} w-full rounded-xl px-4 py-3 transition-all duration-300`}
+                            step="0.01"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={calculateResults}
+                      className={`${gradientButton} w-full rounded-2xl px-4 py-4 text-base font-semibold transition-transform duration-300`}
+                    >
+                      Calculate
+                    </button>
+                  </div>
+                </section>
+              </div>
+
+              <div className="space-y-6">
+                {!result && (
+                  <section className={`${panelBase} rounded-3xl p-8 text-center backdrop-blur-xl shadow-xl space-y-4`}>
+                    <Calendar className="mx-auto h-12 w-12 text-indigo-400" />
+                    <h3 className="text-2xl font-semibold">Starte mit deinen Parametern</h3>
+                    <p className={`${subtleText} text-sm max-w-lg mx-auto`}>
+                      Trage deine Implied Volatilities, Laufzeiten und Marktannahmen ein, um sofort Forward-Faktoren, Preisniveaus und Risikoindikatoren zu erhalten.
+                    </p>
+                  </section>
+                )}
+
+                {result && result.error && (
+                  <section className={`${panelBase} rounded-3xl border border-rose-500/60 bg-rose-500/5 p-8 backdrop-blur-xl shadow-xl`}>
+                    <p className="text-lg font-semibold text-rose-300">{result.error}</p>
+                    <p className={`${subtleText} mt-2 text-sm`}>Bitte passe deine Eingaben an und versuche es erneut.</p>
+                  </section>
+                )}
+
+                {result && !result.error && (
+                  <>
+                    <section className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className={`${miniPanelBase} rounded-2xl p-5 shadow-lg backdrop-blur-xl`}>
+                          <p className={`text-xs uppercase tracking-wide ${subtleText}`}>Forward Volatility</p>
+                          <p className="mt-2 text-3xl font-bold">{result.forwardVolPct}%</p>
+                          <p className={`mt-3 text-xs font-medium ${subtleText}`}>{result.daysToExp1}-{result.daysToExp2} DTE</p>
+                        </div>
+
+                        <div className={`${getFFColor(result.forwardFactor)} rounded-2xl border p-5 shadow-lg backdrop-blur-xl`}>
+                          <p className="text-xs uppercase tracking-wide opacity-80">Forward Faktor</p>
+                          <p className="mt-2 text-3xl font-extrabold">{result.forwardFactor}%</p>
+                          <p className="mt-3 text-xs font-semibold opacity-80">
+                            {parseFloat(result.forwardFactor) >= 30 ? 'Level: Excellent' : parseFloat(result.forwardFactor) >= 16 ? 'Level: Attractive' : 'Level: Watchlist'}
                           </p>
                         </div>
+
+                        <div className={`${miniPanelBase} rounded-2xl p-5 shadow-lg backdrop-blur-xl`}>
+                          <p className={`text-xs uppercase tracking-wide ${subtleText}`}>Timing Window</p>
+                          <p className="mt-2 text-lg font-semibold">{new Date(date1).toLocaleDateString('en-US')} → {new Date(date2).toLocaleDateString('en-US')}</p>
+                          <p className={`mt-3 text-xs font-medium ${subtleText}`}>Next expirations in New York close alignment</p>
+                        </div>
                       </div>
+                    </section>
 
-                      {/* Große Box mit Preisen */}
-                      <div className={`border-4 border-red-600 p-6 rounded-lg ${darkMode ? 'bg-red-900 text-red-100' : 'bg-red-50 text-red-900'}`}>
-                        <p className="text-lg font-bold mb-4">TARGET PRICE FOR FF 30%</p>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div className="border-2 border-red-400 p-4 rounded">
-                            <p className="text-sm font-semibold mb-2">CALL SPREAD</p>
-                            <div className="text-center">
-                              <p className="text-5xl font-bold text-red-600">${result.maxCallCalendarPrice30}</p>
-                              <p className="text-xs opacity-75 mt-2">Max Entry Price</p>
-                            </div>
+                    <section className={`${panelBase} rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-xl space-y-6`}>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="text-2xl font-semibold">Target Price @ FF +30%</h3>
+                        <span className={`${subtleText} text-sm`}>Maximale Einstiegslevel für aggressive Forwards</span>
+                      </div>
+                      <div className="grid gap-6 sm:grid-cols-2">
+                        <div className={`${miniPanelBase} rounded-2xl p-5 text-center shadow-lg backdrop-blur-xl`}>
+                          <p className={`text-xs uppercase tracking-wide ${subtleText}`}>Call Spread</p>
+                          <p className="mt-4 text-4xl font-black text-rose-400">${result.maxCallCalendarPrice30}</p>
+                          <p className={`${subtleText} mt-2 text-xs`}>Max Entry Price</p>
+                        </div>
+                        <div className={`${miniPanelBase} rounded-2xl p-5 text-center shadow-lg backdrop-blur-xl`}>
+                          <p className={`text-xs uppercase tracking-wide ${subtleText}`}>Put Spread</p>
+                          <p className="mt-4 text-4xl font-black text-rose-400">${result.maxPutCalendarPrice30}</p>
+                          <p className={`${subtleText} mt-2 text-xs`}>Max Entry Price</p>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className={`${panelBase} rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-xl space-y-6`}>
+                      <h3 className="text-2xl font-semibold">Aktuelle Calendar Spreads</h3>
+                      <div className="grid gap-6 sm:grid-cols-2">
+                        <div className={`${miniPanelBase} rounded-2xl p-5 shadow-lg backdrop-blur-xl space-y-3`}>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold">Call Spread</p>
+                            <span className="text-xs font-semibold text-indigo-400">Live</span>
                           </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Current Price</span>
+                            <span className="text-2xl font-bold text-indigo-400">${result.callCalendarSpread}</span>
+                          </div>
+                          <div className={`flex items-center justify-between text-xs ${subtleText}`}>
+                            <span>FF 0%</span>
+                            <span className="font-semibold">${result.callCalendarSpreadAt0}</span>
+                          </div>
+                        </div>
 
-                          <div className="border-2 border-red-400 p-4 rounded">
-                            <p className="text-sm font-semibold mb-2">PUT SPREAD</p>
-                            <div className="text-center">
-                              <p className="text-5xl font-bold text-red-600">${result.maxPutCalendarPrice30}</p>
-                              <p className="text-xs opacity-75 mt-2">Max Entry Price</p>
-                            </div>
+                        <div className={`${miniPanelBase} rounded-2xl p-5 shadow-lg backdrop-blur-xl space-y-3`}>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold">Put Spread</p>
+                            <span className="text-xs font-semibold text-pink-400">Live</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Current Price</span>
+                            <span className="text-2xl font-bold text-pink-400">${result.putCalendarSpread}</span>
+                          </div>
+                          <div className={`flex items-center justify-between text-xs ${subtleText}`}>
+                            <span>FF 0%</span>
+                            <span className="font-semibold">${result.putCalendarSpreadAt0}</span>
                           </div>
                         </div>
                       </div>
+                    </section>
 
-                      {/* Große Box mit aktuellen Preisen */}
-                      <div className={`border-4 border-blue-600 p-6 rounded-lg ${darkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-50 text-blue-900'}`}>
-                        <p className="text-lg font-bold mb-4">CURRENT CALENDAR SPREADS</p>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div className="border-2 border-blue-400 p-4 rounded">
-                            <p className="text-sm font-semibold mb-2">CALL SPREAD</p>
-                            <div className="space-y-1">
-                              <div className="flex justify-between">
-                                <span>Current Price:</span>
-                                <span className="font-bold text-2xl text-blue-600">${result.callCalendarSpread}</span>
-                              </div>
-                              <div className="flex justify-between text-xs opacity-75">
-                                <span>For FF 0%:</span>
-                                <span className="font-semibold">${result.callCalendarSpreadAt0}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="border-2 border-pink-400 p-4 rounded">
-                            <p className="text-sm font-semibold mb-2">PUT SPREAD</p>
-                            <div className="space-y-1">
-                              <div className="flex justify-between">
-                                <span>Current Price:</span>
-                                <span className="font-bold text-2xl text-pink-600">${result.putCalendarSpread}</span>
-                              </div>
-                              <div className="flex justify-between text-xs opacity-75">
-                                <span>For FF 0%:</span>
-                                <span className="font-semibold">${result.putCalendarSpreadAt0}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                    <section className={`${panelBase} rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-xl space-y-6`}>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="text-2xl font-semibold">Term Structure Visualization</h3>
+                        <span className={`${subtleText} text-sm`}>Model forward IV curvature across expiries</span>
                       </div>
-
-                      <div className={`border-2 ${borderClass} p-4 rounded-lg`}>
-                        <p className="text-sm font-semibold mb-3">Term Structure Visualization</p>
-                        <ResponsiveContainer width="100%" height={250}>
+                      <div className={`${miniPanelBase} rounded-2xl p-4 shadow-inner backdrop-blur-xl`}>
+                        <ResponsiveContainer width="100%" height={260}>
                           <LineChart data={chartData}>
-                            <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                            <XAxis dataKey="dte" stroke={darkMode ? '#999' : '#666'} />
-                            <YAxis stroke={darkMode ? '#999' : '#666'} />
-                            <Tooltip 
+                            <CartesianGrid stroke={darkMode ? '#374151' : '#E2E8F0'} strokeDasharray="3 3" />
+                            <XAxis dataKey="dte" stroke={darkMode ? '#CBD5F5' : '#475569'} tick={{ fontSize: 12 }} />
+                            <YAxis stroke={darkMode ? '#CBD5F5' : '#475569'} tick={{ fontSize: 12 }} />
+                            <Tooltip
                               contentStyle={{
-                                backgroundColor: darkMode ? '#333' : '#fff',
-                                border: `1px solid ${darkMode ? '#555' : '#ccc'}`,
-                                color: darkMode ? '#fff' : '#000'
+                                backgroundColor: darkMode ? 'rgba(15,23,42,0.9)' : 'rgba(255,255,255,0.95)',
+                                borderRadius: '1rem',
+                                border: `1px solid ${darkMode ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.25)'}`,
+                                padding: '0.75rem 1rem',
                               }}
+                              labelStyle={{ color: darkMode ? '#E2E8F0' : '#0F172A', fontWeight: 600 }}
+                              itemStyle={{ color: darkMode ? '#A5B4FC' : '#4338CA', fontWeight: 600 }}
                             />
-                            <Line type="monotone" dataKey="iv" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} />
+                            <Line type="monotone" dataKey="iv" stroke="#6366F1" strokeWidth={2.5} dot={{ r: 4, fill: '#38BDF8', strokeWidth: 2, stroke: '#0F172A' }} />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
+                    </section>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className={`border-2 border-blue-500 p-4 rounded-lg ${darkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-50 text-blue-900'}`}>
-                          <p className="font-semibold mb-3">Call Calendar Spread</p>
-                          <div className="grid grid-cols-3 gap-2 text-sm mb-3">
-                            <div>
-                              <p className="text-xs opacity-75">Front (T1)</p>
-                              <p className="font-bold">${result.callT1}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs opacity-75">Back (T2)</p>
-                              <p className="font-bold">${result.callT2}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs opacity-75">Spread</p>
-                              <p className="font-bold text-lg">${result.callCalendarSpread}</p>
-                            </div>
+                    <section className="grid gap-6 lg:grid-cols-2">
+                      <div className={`${panelBase} rounded-3xl p-6 backdrop-blur-xl shadow-xl space-y-4`}>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold">Call Calendar Spread</h4>
+                          <span className={`${subtleText} text-xs`}>Sensitivity</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <p className={`${subtleText} text-xs`}>Front (T1)</p>
+                            <p className="mt-1 font-semibold">${result.callT1}</p>
                           </div>
-                          <div className={`p-2 rounded text-xs opacity-75 mb-3`}>Max für FF +30%: <span className="font-bold">${result.maxCallCalendarPrice30}</span></div>
-                          
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold">Preis-Simulator</p>
-                            <input
-                              type="range"
-                              min="0"
-                              max={parseFloat(result.callCalendarSpread) * 4}
-                              step="0.01"
-                              defaultValue={result.callCalendarSpread}
-                              onChange={(e) => handlePriceSlider(parseFloat(e.target.value), true)}
-                              className="w-full h-2 bg-blue-300 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <div className="flex justify-between text-xs">
-                              <span>${(parseFloat(result.maxCallCalendarPrice30)).toFixed(2)} (FF 30%)</span>
-                              <span className="font-bold">${callPriceSlider !== null ? callPriceSlider.toFixed(2) : result.callCalendarSpread}</span>
-                              <span>${(parseFloat(result.callCalendarSpread) * 4).toFixed(2)} (max)</span>
-                            </div>
-                            {callPriceSlider !== null && adjustedFFCall !== null && (
-                              <div className={`p-2 rounded text-center text-sm font-bold border-2 ${
-                                adjustedFFCall >= 30 ? 'border-green-500 bg-green-200' : 
-                                adjustedFFCall >= 16 ? 'border-yellow-500 bg-yellow-200' : 
-                                'border-gray-400 bg-gray-200'
-                              }`}>
-                                Angepasster FF: {adjustedFFCall.toFixed(2)}%
-                              </div>
-                            )}
+                          <div>
+                            <p className={`${subtleText} text-xs`}>Back (T2)</p>
+                            <p className="mt-1 font-semibold">${result.callT2}</p>
+                          </div>
+                          <div>
+                            <p className={`${subtleText} text-xs`}>Spread</p>
+                            <p className="mt-1 text-lg font-bold">${result.callCalendarSpread}</p>
                           </div>
                         </div>
-
-                        <div className={`border-2 border-pink-500 p-4 rounded-lg ${darkMode ? 'bg-pink-900 text-pink-100' : 'bg-pink-50 text-pink-900'}`}>
-                          <p className="font-semibold mb-3">Put Calendar Spread</p>
-                          <div className="grid grid-cols-3 gap-2 text-sm mb-3">
-                            <div>
-                              <p className="text-xs opacity-75">Front (T1)</p>
-                              <p className="font-bold">${result.putT1}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs opacity-75">Back (T2)</p>
-                              <p className="font-bold">${result.putT2}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs opacity-75">Spread</p>
-                              <p className="font-bold text-lg">${result.putCalendarSpread}</p>
-                            </div>
+                        <div className={`${miniPanelBase} rounded-2xl px-4 py-3 text-xs font-semibold`}>Max für FF +30%: ${result.maxCallCalendarPrice30}</div>
+                        <div className="space-y-3">
+                          <label className={`${subtleText} text-xs font-semibold uppercase tracking-wide`}>Preis-Simulator</label>
+                          <input
+                            type="range"
+                            min="0"
+                            max={parseFloat(result.callCalendarSpread) * 4}
+                            step="0.01"
+                            defaultValue={result.callCalendarSpread}
+                            onChange={(e) => handlePriceSlider(parseFloat(e.target.value), true)}
+                            className="w-full accent-indigo-500"
+                          />
+                          <div className="flex justify-between text-xs font-semibold">
+                            <span>${(parseFloat(result.maxCallCalendarPrice30)).toFixed(2)} (FF 30%)</span>
+                            <span>{callPriceSlider !== null ? callPriceSlider.toFixed(2) : result.callCalendarSpread}</span>
+                            <span>${(parseFloat(result.callCalendarSpread) * 4).toFixed(2)} (max)</span>
                           </div>
-                          <div className={`p-2 rounded text-xs opacity-75 mb-3`}>Max für FF +30%: <span className="font-bold">${result.maxPutCalendarPrice30}</span></div>
-                          
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold">Preis-Simulator</p>
-                            <input
-                              type="range"
-                              min="0"
-                              max={parseFloat(result.putCalendarSpread) * 4}
-                              step="0.01"
-                              defaultValue={result.putCalendarSpread}
-                              onChange={(e) => handlePriceSlider(parseFloat(e.target.value), false)}
-                              className="w-full h-2 bg-pink-300 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <div className="flex justify-between text-xs">
-                              <span>${(parseFloat(result.maxPutCalendarPrice30)).toFixed(2)} (FF 30%)</span>
-                              <span className="font-bold">${putPriceSlider !== null ? putPriceSlider.toFixed(2) : result.putCalendarSpread}</span>
-                              <span>${(parseFloat(result.putCalendarSpread) * 4).toFixed(2)} (max)</span>
+                          {callPriceSlider !== null && adjustedFFCall !== null && (
+                            <div className={`${miniPanelBase} rounded-2xl px-4 py-3 text-sm font-bold text-center`}>
+                              Angepasster FF: {adjustedFFCall.toFixed(2)}%
                             </div>
-                            {putPriceSlider !== null && adjustedFFPut !== null && (
-                              <div className={`p-2 rounded text-center text-sm font-bold border-2 ${
-                                adjustedFFPut >= 30 ? 'border-green-500 bg-green-200' : 
-                                adjustedFFPut >= 16 ? 'border-yellow-500 bg-yellow-200' : 
-                                'border-gray-400 bg-gray-200'
-                              }`}>
-                                Angepasster FF: {adjustedFFPut.toFixed(2)}%
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
                       </div>
 
-                      <button
-                        onClick={exportCSV}
-                        className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2"
-                      >
-                        <Download size={20} /> Ergebnis als CSV exportieren
-                      </button>
-
-                      {tradeHistory.length > 0 && (
-                        <div className={`border-2 ${borderClass} p-4 rounded-lg`}>
-                          <p className="font-semibold mb-3">Trade History (letzte 10)</p>
-                          <div className="text-sm space-y-2 max-h-96 overflow-y-auto">
-                            {tradeHistory.map((trade, idx) => (
-                              <div key={idx} className={`p-3 rounded ${
-                                parseFloat(trade.ff) >= 30 
-                                  ? darkMode ? 'bg-green-900' : 'bg-green-100'
-                                  : parseFloat(trade.ff) >= 16
-                                  ? darkMode ? 'bg-yellow-900' : 'bg-yellow-100'
-                                  : darkMode ? 'bg-gray-700' : 'bg-gray-100'
-                              }`}>
-                                <div className="font-semibold">{trade.ticker} - {trade.date} | FF: {trade.ff.toFixed(2)}%</div>
-                                <div className="text-xs mt-1 space-y-1">
-                                  <div>Aktuell: Call ${parseFloat(trade.callSpreadCurrent).toFixed(4)} | Put ${parseFloat(trade.putSpreadCurrent).toFixed(4)}</div>
-                                  <div>@ FF 30%: Call ${parseFloat(trade.callSpreadFF30).toFixed(4)} | Put ${parseFloat(trade.putSpreadFF30).toFixed(4)}</div>
-                                  <div>@ FF 0%: Call ${parseFloat(trade.callSpreadFF0).toFixed(4)} | Put ${parseFloat(trade.putSpreadFF0).toFixed(4)}</div>
-                                </div>
-                              </div>
-                            ))}
+                      <div className={`${panelBase} rounded-3xl p-6 backdrop-blur-xl shadow-xl space-y-4`}>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold">Put Calendar Spread</h4>
+                          <span className={`${subtleText} text-xs`}>Sensitivity</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <p className={`${subtleText} text-xs`}>Front (T1)</p>
+                            <p className="mt-1 font-semibold">${result.putT1}</p>
+                          </div>
+                          <div>
+                            <p className={`${subtleText} text-xs`}>Back (T2)</p>
+                            <p className="mt-1 font-semibold">${result.putT2}</p>
+                          </div>
+                          <div>
+                            <p className={`${subtleText} text-xs`}>Spread</p>
+                            <p className="mt-1 text-lg font-bold">${result.putCalendarSpread}</p>
                           </div>
                         </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+                        <div className={`${miniPanelBase} rounded-2xl px-4 py-3 text-xs font-semibold`}>Max für FF +30%: ${result.maxPutCalendarPrice30}</div>
+                        <div className="space-y-3">
+                          <label className={`${subtleText} text-xs font-semibold uppercase tracking-wide`}>Preis-Simulator</label>
+                          <input
+                            type="range"
+                            min="0"
+                            max={parseFloat(result.putCalendarSpread) * 4}
+                            step="0.01"
+                            defaultValue={result.putCalendarSpread}
+                            onChange={(e) => handlePriceSlider(parseFloat(e.target.value), false)}
+                            className="w-full accent-pink-500"
+                          />
+                          <div className="flex justify-between text-xs font-semibold">
+                            <span>${(parseFloat(result.maxPutCalendarPrice30)).toFixed(2)} (FF 30%)</span>
+                            <span>{putPriceSlider !== null ? putPriceSlider.toFixed(2) : result.putCalendarSpread}</span>
+                            <span>${(parseFloat(result.putCalendarSpread) * 4).toFixed(2)} (max)</span>
+                          </div>
+                          {putPriceSlider !== null && adjustedFFPut !== null && (
+                            <div className={`${miniPanelBase} rounded-2xl px-4 py-3 text-sm font-bold text-center`}>
+                              Angepasster FF: {adjustedFFPut.toFixed(2)}%
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+
+                    <button
+                      onClick={exportCSV}
+                      className={`${gradientButton} w-full rounded-2xl px-4 py-4 text-base font-semibold transition-transform duration-300 flex items-center justify-center gap-3`}
+                    >
+                      <Download size={20} className="opacity-90" /> Ergebnis als CSV exportieren
+                    </button>
+
+                    {tradeHistory.length > 0 && (
+                      <section className={`${panelBase} rounded-3xl p-6 backdrop-blur-xl shadow-xl space-y-4`}>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold">Trade History</h4>
+                          <span className={`${subtleText} text-xs`}>Letzte 10 Simulationen</span>
+                        </div>
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                          {tradeHistory.map((trade, idx) => (
+                            <div
+                              key={idx}
+                              className={`${miniPanelBase} rounded-2xl px-4 py-3 text-sm backdrop-blur-xl`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-semibold">{trade.ticker} · {trade.date}</span>
+                                <span className="text-xs font-semibold">FF: {trade.ff.toFixed(2)}%</span>
+                              </div>
+                              <div className={`${subtleText} mt-2 space-y-1 text-xs`}>
+                                <div>Aktuell · Call ${parseFloat(trade.callSpreadCurrent).toFixed(4)} | Put ${parseFloat(trade.putSpreadCurrent).toFixed(4)}</div>
+                                <div>FF 30% · Call ${parseFloat(trade.callSpreadFF30).toFixed(4)} | Put ${parseFloat(trade.putSpreadFF30).toFixed(4)}</div>
+                                <div>FF 0% · Call ${parseFloat(trade.callSpreadFF0).toFixed(4)} | Put ${parseFloat(trade.putSpreadFF0).toFixed(4)}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <Analytics /> 
+      <Analytics />
     </div>
   );
 }
