@@ -23,12 +23,151 @@ export default function ForwardVolCalculator() {
   const [adjustedFFPut, setAdjustedFFPut] = useState(null);
   const [pricingModel, setPricingModel] = useState('blackscholes');
   const [ticker, setTicker] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+
+  const fetchOptionData = async (tickerSymbol) => {
+    if (!tickerSymbol || tickerSymbol.trim() === '') {
+      setLoadError('Please enter a ticker symbol');
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
+
+    try {
+      const symbol = tickerSymbol.toUpperCase().trim();
+      console.log('Fetching data for:', symbol);
+
+      // Fetch option chain from Yahoo Finance
+      const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}`;
+      console.log('API URL:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        throw new Error(`Ticker not found (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log('API Response:', data);
+
+      if (!data.optionChain || !data.optionChain.result || data.optionChain.result.length === 0) {
+        throw new Error('No option data available for this ticker');
+      }
+
+      const result = data.optionChain.result[0];
+
+      if (result.error) {
+        throw new Error(result.error.description || 'API returned an error');
+      }
+
+      const quote = result.quote;
+      const expirationDates = result.expirationDates;
+      const options = result.options[0];
+
+      if (!quote || !quote.regularMarketPrice) {
+        throw new Error('No price data available');
+      }
+
+      if (!expirationDates || expirationDates.length < 2) {
+        throw new Error('Not enough expiration dates available (need at least 2)');
+      }
+
+      if (!options || !options.calls || options.calls.length === 0) {
+        throw new Error('No call options available');
+      }
+
+      // Set spot price
+      setSpotPrice(quote.regularMarketPrice.toFixed(2));
+
+      // Find ATM strike for first expiration
+      const atmCall = options.calls.reduce((prev, curr) =>
+        Math.abs(curr.strike - quote.regularMarketPrice) <
+        Math.abs(prev.strike - quote.regularMarketPrice) ? curr : prev
+      );
+
+      if (!atmCall.impliedVolatility || atmCall.impliedVolatility <= 0) {
+        throw new Error('No valid IV data for first expiration');
+      }
+
+      setStrikePrice(atmCall.strike.toFixed(2));
+      setIv1((atmCall.impliedVolatility * 100).toFixed(2));
+
+      // Set first expiration date
+      const firstExp = new Date(expirationDates[0] * 1000);
+      setDate1(firstExp.toISOString().split('T')[0]);
+
+      // Fetch second expiration data
+      const url2 = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?date=${expirationDates[1]}`;
+      console.log('Fetching second expiration:', url2);
+
+      const response2 = await fetch(url2, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+
+      if (!response2.ok) {
+        throw new Error(`Error fetching second expiration (${response2.status})`);
+      }
+
+      const data2 = await response2.json();
+      console.log('Second expiration data:', data2);
+
+      const result2 = data2.optionChain.result[0];
+      const options2 = result2.options[0];
+
+      if (!options2 || !options2.calls || options2.calls.length === 0) {
+        throw new Error('No call options for second expiration');
+      }
+
+      // Find ATM strike for second expiration
+      const atmCall2 = options2.calls.reduce((prev, curr) =>
+        Math.abs(curr.strike - quote.regularMarketPrice) <
+        Math.abs(prev.strike - quote.regularMarketPrice) ? curr : prev
+      );
+
+      if (!atmCall2.impliedVolatility || atmCall2.impliedVolatility <= 0) {
+        throw new Error('No valid IV data for second expiration');
+      }
+
+      setIv2((atmCall2.impliedVolatility * 100).toFixed(2));
+
+      // Set second expiration date
+      const secondExp = new Date(expirationDates[1] * 1000);
+      setDate2(secondExp.toISOString().split('T')[0]);
+
+      setLoading(false);
+      setLoadError(null);
+
+      console.log('Data loaded successfully!');
+
+      // Auto-calculate after loading data
+      setTimeout(() => calculateResults(), 100);
+
+    } catch (error) {
+      console.error('Error fetching option data:', error);
+      setLoadError(error.message || 'Failed to load option data');
+      setLoading(false);
+    }
+  };
 
   const getNextFridays = () => {
     const today = new Date();
     let fridays = [];
     let currentDate = new Date(today);
-    
+
     while (fridays.length < 50) {
       if (currentDate.getDay() === 5) {
         fridays.push(new Date(currentDate));
@@ -502,17 +641,46 @@ export default function ForwardVolCalculator() {
 
               <div>
                 <label className="block text-sm font-semibold mb-2">Ticker Symbol</label>
-                <input
-                  type="text"
-                  value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                    darkMode
-                      ? 'bg-gray-700 border-gray-600 focus:border-blue-400'
-                      : 'bg-white border-blue-300 focus:border-blue-500'
-                  }`}
-                  placeholder="e.g. AAPL"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        fetchOptionData(ticker);
+                      }
+                    }}
+                    className={`flex-1 px-4 py-2 border-2 rounded-lg focus:outline-none ${
+                      darkMode
+                        ? 'bg-gray-700 border-gray-600 focus:border-blue-400'
+                        : 'bg-white border-blue-300 focus:border-blue-500'
+                    }`}
+                    placeholder="e.g. AAPL"
+                    disabled={loading}
+                  />
+                  <button
+                    onClick={() => fetchOptionData(ticker)}
+                    disabled={loading}
+                    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : darkMode
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-purple-500 hover:bg-purple-600 text-white'
+                    }`}
+                  >
+                    {loading ? '...' : 'Load'}
+                  </button>
+                </div>
+                {loadError && (
+                  <p className="text-red-500 text-xs mt-1">{loadError}</p>
+                )}
+                {loading && (
+                  <p className={`text-xs mt-1 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                    Loading option data...
+                  </p>
+                )}
               </div>
 
               <div className="relative">
