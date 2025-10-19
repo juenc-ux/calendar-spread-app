@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Info, Calendar, Download, Moon, Sun } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function ForwardVolCalculator() {
@@ -810,6 +811,7 @@ export default function ForwardVolCalculator() {
           </div>
         </div>
       </div>
+      <Analytics /> 
     </div>
   );
 }
