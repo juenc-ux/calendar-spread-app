@@ -697,29 +697,47 @@ export default function ForwardVolCalculator() {
               );
               
               if (calls.length > 0) {
-                // Always use the closest strike to current price (ATM-based)
-                const maxDistance = S < 10 ? 5 : 100; // $5 for stocks under $10, $100 for others
-                console.log(`  → Available strikes: ${calls.map(c => c.details.strike_price).slice(0, 10).join(', ')}...`);
+                // Find strike with delta closest to 0.5 (for calls)
+                const callsWithDelta = calls.filter(opt => opt.greeks?.delta !== undefined);
                 
-                const sortedCalls = calls
-                  .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < maxDistance)
-                  .sort((a, b) => {
-                    const distA = Math.abs(a.details.strike_price - atmStrike);
-                    const distB = Math.abs(b.details.strike_price - atmStrike);
-                    return distA - distB;
+                if (callsWithDelta.length > 0) {
+                  // Sort by delta closest to 0.5
+                  const sortedCalls = callsWithDelta.sort((a, b) => {
+                    const deltaA = Math.abs(a.greeks.delta - 0.5);
+                    const deltaB = Math.abs(b.greeks.delta - 0.5);
+                    return deltaA - deltaB;
                   });
 
-                console.log(`  → Filtered strikes (within $${maxDistance} of ATM): ${sortedCalls.map(c => c.details.strike_price).join(', ')}`);
+                  const selectedCall = sortedCalls[0];
+                  if (selectedCall && selectedCall.implied_volatility > 0) {
+                    console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}%, Delta: ${(selectedCall.greeks.delta * 100).toFixed(1)}% (closest to 0.5 delta)`);
+                    return { 
+                      date: expDate, 
+                      iv: selectedCall.implied_volatility,
+                      strike: selectedCall.details.strike_price,
+                      delta: selectedCall.greeks.delta
+                    };
+                  }
+                } else {
+                  // Fallback: closest to ATM if no delta data
+                  console.log(`  → No delta data available, using ATM fallback`);
+                  const sortedCalls = calls
+                    .sort((a, b) => {
+                      const distA = Math.abs(a.details.strike_price - atmStrike);
+                      const distB = Math.abs(b.details.strike_price - atmStrike);
+                      return distA - distB;
+                    });
 
-                const selectedCall = sortedCalls[0];
-                if (selectedCall && selectedCall.implied_volatility > 0) {
-                  console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}% (closest to ATM)`);
-                  return { 
-                    date: expDate, 
-                    iv: selectedCall.implied_volatility,
-                    strike: selectedCall.details.strike_price,
-                    delta: selectedCall.greeks?.delta || null
-                  };
+                  const selectedCall = sortedCalls[0];
+                  if (selectedCall && selectedCall.implied_volatility > 0) {
+                    console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}% (ATM fallback)`);
+                    return { 
+                      date: expDate, 
+                      iv: selectedCall.implied_volatility,
+                      strike: selectedCall.details.strike_price,
+                      delta: null
+                    };
+                  }
                 }
               }
               

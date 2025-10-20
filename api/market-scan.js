@@ -106,7 +106,7 @@ export default async (req, res) => {
           
           const atmStrike = Math.round(spotPrice / 5) * 5;
           
-          // Find closest strike to current price (ATM-based)
+          // Find strike with delta closest to 0.5 (for calls)
           const findBestStrike = (options) => {
             if (!options?.results) return null;
             
@@ -118,7 +118,17 @@ export default async (req, res) => {
             
             if (calls.length === 0) return null;
             
-            // Sort by distance from ATM (closest first)
+            // First try: Delta-based selection
+            const callsWithDelta = calls.filter(opt => opt.greeks?.delta !== undefined);
+            if (callsWithDelta.length > 0) {
+              return callsWithDelta.sort((a, b) => {
+                const deltaA = Math.abs(a.greeks.delta - 0.5);
+                const deltaB = Math.abs(b.greeks.delta - 0.5);
+                return deltaA - deltaB;
+              })[0];
+            }
+            
+            // Fallback: closest to ATM
             return calls.sort((a, b) => {
               const distA = Math.abs(a.details.strike_price - atmStrike);
               const distB = Math.abs(b.details.strike_price - atmStrike);
