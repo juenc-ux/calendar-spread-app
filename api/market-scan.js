@@ -106,11 +106,37 @@ export default async (req, res) => {
           
           const atmStrike = Math.round(spotPrice / 5) * 5;
           
-          const atm1 = iv1Data.results?.filter(o => Math.abs(o.details?.strike_price - atmStrike) < 20)
-            .sort((a, b) => Math.abs(a.details.strike_price - atmStrike) - Math.abs(b.details.strike_price - atmStrike))[0];
+          // Find strikes closest to 0.5 delta (prioritize delta-based selection)
+          const findBestStrike = (options) => {
+            if (!options?.results) return null;
+            
+            const calls = options.results.filter(opt => 
+              opt.details?.strike_price && 
+              opt.details?.contract_type === 'call' &&
+              Math.abs(opt.details.strike_price - atmStrike) < 50
+            );
+            
+            if (calls.length === 0) return null;
+            
+            // Sort by distance from ATM, then by delta closest to 0.5
+            return calls.sort((a, b) => {
+              const distA = Math.abs(a.details.strike_price - atmStrike);
+              const distB = Math.abs(b.details.strike_price - atmStrike);
+              if (Math.abs(distA - distB) > 5) {
+                return distA - distB;
+              }
+              // If delta is available, prioritize closest to 0.5
+              if (a.greeks?.delta && b.greeks?.delta) {
+                const deltaA = Math.abs(a.greeks.delta - 0.5);
+                const deltaB = Math.abs(b.greeks.delta - 0.5);
+                return deltaA - deltaB;
+              }
+              return distA - distB;
+            })[0];
+          };
           
-          const atm2 = iv2Data.results?.filter(o => Math.abs(o.details?.strike_price - atmStrike) < 20)
-            .sort((a, b) => Math.abs(a.details.strike_price - atmStrike) - Math.abs(b.details.strike_price - atmStrike))[0];
+          const atm1 = findBestStrike(iv1Data);
+          const atm2 = findBestStrike(iv2Data);
           
           if (!atm1?.implied_volatility || !atm2?.implied_volatility) continue;
           

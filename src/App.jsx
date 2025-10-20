@@ -651,7 +651,6 @@ export default function ForwardVolCalculator() {
     try {
       const symbol = ticker.toUpperCase().trim();
       const S = parseFloat(spotPrice);
-      const K = Math.round(S / 5) * 5; // ATM strike
       const r = parseFloat(riskFreeRate) / 100;
       const q = parseFloat(dividend) / 100;
 
@@ -680,16 +679,44 @@ export default function ForwardVolCalculator() {
             console.log(`  → API Status: ${data.status}, Results: ${data.results?.length || 0}`);
             
             if (data.status === 'OK' && data.results && data.results.length > 0) {
-              const atmCall = data.results
-                .filter(opt => opt.details?.strike_price && Math.abs(opt.details.strike_price - K) < 20)
-                .sort((a, b) => Math.abs(a.details.strike_price - K) - Math.abs(b.details.strike_price - K))[0];
+              // Find strike closest to 0.5 delta (or -0.5 delta for puts)
+              // For now, use ATM strike as fallback, but prioritize delta-based selection
+              const atmStrike = Math.round(S / 5) * 5;
+              const calls = data.results.filter(opt => opt.details?.strike_price && opt.details?.contract_type === 'call');
+              
+              if (calls.length > 0) {
+                // Sort by distance from ATM, then by delta closest to 0.5
+                const sortedCalls = calls
+                  .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < 50) // Within $50 of ATM
+                  .sort((a, b) => {
+                    // First priority: closest to ATM
+                    const distA = Math.abs(a.details.strike_price - atmStrike);
+                    const distB = Math.abs(b.details.strike_price - atmStrike);
+                    if (Math.abs(distA - distB) > 5) {
+                      return distA - distB;
+                    }
+                    // Second priority: delta closest to 0.5 (if available)
+                    if (a.greeks?.delta && b.greeks?.delta) {
+                      const deltaA = Math.abs(a.greeks.delta - 0.5);
+                      const deltaB = Math.abs(b.greeks.delta - 0.5);
+                      return deltaA - deltaB;
+                    }
+                    return distA - distB;
+                  });
 
-              if (atmCall && atmCall.implied_volatility > 0) {
-                console.log(`  ✓ Found ATM call at strike ${atmCall.details.strike_price}, IV: ${(atmCall.implied_volatility * 100).toFixed(2)}%`);
-                return { date: expDate, iv: atmCall.implied_volatility };
-              } else {
-                console.log(`  ✗ No ATM call found near strike ${K}`);
+                const selectedCall = sortedCalls[0];
+                if (selectedCall && selectedCall.implied_volatility > 0) {
+                  console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}%`);
+                  return { 
+                    date: expDate, 
+                    iv: selectedCall.implied_volatility,
+                    strike: selectedCall.details.strike_price,
+                    delta: selectedCall.greeks?.delta || null
+                  };
+                }
               }
+              
+              console.log(`  ✗ No suitable call found for ${expDate}`);
             } else {
               console.log(`  ✗ No valid results in response`);
             }
@@ -748,9 +775,13 @@ export default function ForwardVolCalculator() {
             const forwardVol = Math.sqrt(numerator / denominator);
             const ff = ((v1 / forwardVol) - 1) * 100;
 
-            // Calculate call spread price
-            const callT1 = getOptionPrice(S, K, T1, r, v1, q, true);
-            const callT2 = getOptionPrice(S, K, T2, r, v2, q, true);
+            // Use the strike from the selected option (prefer delta-based selection)
+            const strike1 = exp1.strike || Math.round(S / 5) * 5;
+            const strike2 = exp2.strike || Math.round(S / 5) * 5;
+            
+            // Calculate call spread price using the selected strikes
+            const callT1 = getOptionPrice(S, strike1, T1, r, v1, q, true);
+            const callT2 = getOptionPrice(S, strike2, T2, r, v2, q, true);
             const callSpread = callT2 - callT1;
 
             // Check if front expiration is after earnings
@@ -771,7 +802,7 @@ export default function ForwardVolCalculator() {
               iv1: (v1 * 100).toFixed(2),
               iv2: (v2 * 100).toFixed(2),
               callSpread: callSpread.toFixed(2),
-              strike: K,
+              strike: strike1, // Use the selected strike from delta-based selection
               isPostEarnings: isPostEarnings
             });
           }
