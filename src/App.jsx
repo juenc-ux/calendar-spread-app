@@ -1021,7 +1021,9 @@ export default function ForwardVolCalculator() {
       console.log('=== SCAN COMPLETE ===');
       console.log(`Found ${filteredSpreads.length} valid spreads, showing top ${Math.min(10, topSpreads.length)}`);
       console.log('Top 10 spreads:', topSpreads);
+      console.log('Setting recommended spreads...', topSpreads.length, 'spreads');
       setRecommendedSpreads(topSpreads);
+      console.log('Recommended spreads set successfully');
 
       // Add to watchlist with best FF
       if (topSpreads.length > 0) {
@@ -1554,6 +1556,14 @@ export default function ForwardVolCalculator() {
       return () => clearTimeout(timeoutId);
     }
   }, [date1, date2, iv1, iv2, spotPrice, strikePrice, riskFreeRate, dividend, pricingModel]);
+
+  // Debug: Log when recommended spreads change
+  useEffect(() => {
+    console.log('Recommended spreads updated:', recommendedSpreads.length, 'spreads');
+    if (recommendedSpreads.length > 0) {
+      console.log('First spread:', recommendedSpreads[0]);
+    }
+  }, [recommendedSpreads]);
 
   // Check if earnings overlaps with strategy dates
   useEffect(() => {
