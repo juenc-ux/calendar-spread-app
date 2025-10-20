@@ -689,6 +689,7 @@ export default function ForwardVolCalculator() {
               // Find strike closest to 0.5 delta, fallback to ATM
               // For stocks under $10, use $1 increments, otherwise $5 increments
               const atmStrike = S < 10 ? Math.round(S) : Math.round(S / 5) * 5;
+              console.log(`  → Current price: $${S}, ATM strike: $${atmStrike}`);
               const calls = data.results.filter(opt => 
                 opt.details?.strike_price && 
                 opt.details?.contract_type === 'call' &&
@@ -698,6 +699,8 @@ export default function ForwardVolCalculator() {
               if (calls.length > 0) {
                 // Always use the closest strike to current price (ATM-based)
                 const maxDistance = S < 10 ? 5 : 100; // $5 for stocks under $10, $100 for others
+                console.log(`  → Available strikes: ${calls.map(c => c.details.strike_price).slice(0, 10).join(', ')}...`);
+                
                 const sortedCalls = calls
                   .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < maxDistance)
                   .sort((a, b) => {
@@ -705,6 +708,8 @@ export default function ForwardVolCalculator() {
                     const distB = Math.abs(b.details.strike_price - atmStrike);
                     return distA - distB;
                   });
+
+                console.log(`  → Filtered strikes (within $${maxDistance} of ATM): ${sortedCalls.map(c => c.details.strike_price).join(', ')}`);
 
                 const selectedCall = sortedCalls[0];
                 if (selectedCall && selectedCall.implied_volatility > 0) {
