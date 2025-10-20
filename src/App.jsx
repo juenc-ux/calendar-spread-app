@@ -676,6 +676,7 @@ export default function ForwardVolCalculator() {
         try {
           console.log(`[${index + 1}/${expsToScan.length}] Fetching IV for ${expDate}...`);
           const chainUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`;
+          console.log(`  → API URL: ${chainUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
           const response = await fetch(chainUrl);
 
           console.log(`  → Response status: ${response.status}`);
@@ -728,6 +729,8 @@ export default function ForwardVolCalculator() {
             }
           } else {
             console.warn(`  ✗ HTTP Error: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            console.warn(`  ✗ Error response: ${errorText.substring(0, 200)}...`);
           }
         } catch (error) {
           console.error(`  ✗ Exception for ${expDate}:`, error.message);
