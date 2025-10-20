@@ -61,6 +61,8 @@ export default function ForwardVolCalculator() {
   const [marketScanResults, setMarketScanResults] = useState([]);
   const [loadingMarketScan, setLoadingMarketScan] = useState(false);
   const [lastMarketScan, setLastMarketScan] = useState(null);
+  const [minOpenInterest, setMinOpenInterest] = useState(0);
+  const [minVolume, setMinVolume] = useState(0);
   const [recentTickers, setRecentTickers] = useState(() => {
     const saved = localStorage.getItem(`recentTickers_${currentUser}`);
     return saved ? JSON.parse(saved) : [];
@@ -679,30 +681,44 @@ export default function ForwardVolCalculator() {
       console.log('Will scan first:', expsToScan.length);
       console.log('Expirations to scan:', expsToScan);
 
-      // Fetch IV for all expirations in parallel
+      // Fetch IV for all expirations in parallel (both calls and puts)
       const ivPromises = expsToScan.map(async (expDate, index) => {
         try {
           console.log(`[${index + 1}/${expsToScan.length}] Fetching IV for ${expDate}...`);
-          const chainUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`;
-          console.log(`  → API URL: ${chainUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
-          const response = await fetch(chainUrl);
+          
+          // Fetch both calls and puts
+          const [callsResponse, putsResponse] = await Promise.all([
+            fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`),
+            fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=put&limit=250&apiKey=${apiKey}`)
+          ]);
 
-          console.log(`  → Response status: ${response.status}`);
+          console.log(`  → Calls response status: ${callsResponse.status}`);
+          console.log(`  → Puts response status: ${putsResponse.status}`);
 
-          if (response.ok) {
-            const data = await response.json();
-            console.log(`  → API Status: ${data.status}, Results: ${data.results?.length || 0}`);
+          if (callsResponse.ok && putsResponse.ok) {
+            const [callsData, putsData] = await Promise.all([
+              callsResponse.json(),
+              putsResponse.json()
+            ]);
+            console.log(`  → Calls API Status: ${callsData.status}, Results: ${callsData.results?.length || 0}`);
+            console.log(`  → Puts API Status: ${putsData.status}, Results: ${putsData.results?.length || 0}`);
             
-            if (data.status === 'OK' && data.results && data.results.length > 0) {
+            if (callsData.status === 'OK' && callsData.results && callsData.results.length > 0) {
               // Find strike closest to 0.5 delta, fallback to ATM
               // For stocks under $10, use $1 increments, otherwise $5 increments
               const atmStrike = S < 10 ? Math.round(S) : Math.round(S / 5) * 5;
               console.log(`  → Current price: $${S}, ATM strike: $${atmStrike}`);
-              const calls = data.results.filter(opt => 
+              const calls = callsData.results.filter(opt => 
                 opt.details?.strike_price && 
                 opt.details?.contract_type === 'call' &&
                 opt.implied_volatility > 0
               );
+              
+              const puts = putsData.results?.filter(opt => 
+                opt.details?.strike_price && 
+                opt.details?.contract_type === 'put' &&
+                opt.implied_volatility > 0
+              ) || [];
               
               if (calls.length > 0) {
                 // Find strike with delta closest to 0.5 (for calls)
@@ -719,11 +735,21 @@ export default function ForwardVolCalculator() {
                   const selectedCall = sortedCalls[0];
                   if (selectedCall && selectedCall.implied_volatility > 0) {
                     console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}%, Delta: ${(selectedCall.greeks.delta * 100).toFixed(1)}% (closest to 0.5 delta)`);
+                    // Find corresponding put option
+                    const correspondingPut = puts.find(put => 
+                      put.details?.strike_price === selectedCall.details.strike_price
+                    );
+                    
                     return { 
                       date: expDate, 
                       iv: selectedCall.implied_volatility,
                       strike: selectedCall.details.strike_price,
-                      delta: selectedCall.greeks.delta
+                      delta: selectedCall.greeks.delta,
+                      callOpenInterest: selectedCall.open_interest || 0,
+                      callVolume: selectedCall.volume || 0,
+                      putOpenInterest: correspondingPut?.open_interest || 0,
+                      putVolume: correspondingPut?.volume || 0,
+                      putIv: correspondingPut?.implied_volatility || 0
                     };
                   }
                 } else {
@@ -739,11 +765,21 @@ export default function ForwardVolCalculator() {
                   const selectedCall = sortedCalls[0];
                   if (selectedCall && selectedCall.implied_volatility > 0) {
                     console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}% (ATM fallback)`);
+                    // Find corresponding put option
+                    const correspondingPut = puts.find(put => 
+                      put.details?.strike_price === selectedCall.details.strike_price
+                    );
+                    
                     return { 
                       date: expDate, 
                       iv: selectedCall.implied_volatility,
                       strike: selectedCall.details.strike_price,
-                      delta: null
+                      delta: null,
+                      callOpenInterest: selectedCall.open_interest || 0,
+                      callVolume: selectedCall.volume || 0,
+                      putOpenInterest: correspondingPut?.open_interest || 0,
+                      putVolume: correspondingPut?.volume || 0,
+                      putIv: correspondingPut?.implied_volatility || 0
                     };
                   }
                 }
@@ -824,6 +860,11 @@ export default function ForwardVolCalculator() {
             const callT2 = getOptionPrice(S, strike2, T2, r, v2, q, true);
             const callSpread = callT2 - callT1;
 
+            // Calculate put spread price using the selected strikes
+            const putT1 = getOptionPrice(S, strike1, T1, r, v1, q, false);
+            const putT2 = getOptionPrice(S, strike2, T2, r, v2, q, false);
+            const putSpread = putT2 - putT1;
+
             // Check if front expiration is after earnings
             let isPostEarnings = false;
             if (nextEarningsDate) {
@@ -842,8 +883,19 @@ export default function ForwardVolCalculator() {
               iv1: (v1 * 100).toFixed(2),
               iv2: (v2 * 100).toFixed(2),
               callSpread: callSpread.toFixed(2),
+              putSpread: putSpread.toFixed(2),
               strike: strike1, // Use the selected strike from delta-based selection
-              isPostEarnings: isPostEarnings
+              isPostEarnings: isPostEarnings,
+              // Liquidity data from exp1 (front expiration)
+              callOpenInterest1: exp1.callOpenInterest || 0,
+              callVolume1: exp1.callVolume || 0,
+              putOpenInterest1: exp1.putOpenInterest || 0,
+              putVolume1: exp1.putVolume || 0,
+              // Liquidity data from exp2 (back expiration)
+              callOpenInterest2: exp2.callOpenInterest || 0,
+              callVolume2: exp2.callVolume || 0,
+              putOpenInterest2: exp2.putOpenInterest || 0,
+              putVolume2: exp2.putVolume || 0
             });
           } else {
             // Invalid IV combination - Forward Vol would be imaginary
@@ -854,6 +906,11 @@ export default function ForwardVolCalculator() {
             const callT1 = getOptionPrice(S, strike1, T1, r, v1, q, true);
             const callT2 = getOptionPrice(S, strike2, T2, r, v2, q, true);
             const callSpread = callT2 - callT1;
+
+            // Calculate put spread price using the selected strikes
+            const putT1 = getOptionPrice(S, strike1, T1, r, v1, q, false);
+            const putT2 = getOptionPrice(S, strike2, T2, r, v2, q, false);
+            const putSpread = putT2 - putT1;
 
             // Check if front expiration is after earnings
             let isPostEarnings = false;
@@ -873,8 +930,19 @@ export default function ForwardVolCalculator() {
               iv1: (v1 * 100).toFixed(2),
               iv2: (v2 * 100).toFixed(2),
               callSpread: callSpread.toFixed(2),
+              putSpread: putSpread.toFixed(2),
               strike: strike1,
-              isPostEarnings: isPostEarnings
+              isPostEarnings: isPostEarnings,
+              // Liquidity data from exp1 (front expiration)
+              callOpenInterest1: exp1.callOpenInterest || 0,
+              callVolume1: exp1.callVolume || 0,
+              putOpenInterest1: exp1.putOpenInterest || 0,
+              putVolume1: exp1.putVolume || 0,
+              // Liquidity data from exp2 (back expiration)
+              callOpenInterest2: exp2.callOpenInterest || 0,
+              callVolume2: exp2.callVolume || 0,
+              putOpenInterest2: exp2.putOpenInterest || 0,
+              putVolume2: exp2.putVolume || 0
             });
           }
         }
@@ -889,6 +957,20 @@ export default function ForwardVolCalculator() {
       if (hidePostEarningsSpreads) {
         filteredSpreads = spreads.filter(s => !s.isPostEarnings);
         console.log(`Filtered to ${filteredSpreads.length} spreads (removed post-earnings)`);
+      }
+
+      // Apply liquidity filters
+      if (minOpenInterest > 0 || minVolume > 0) {
+        filteredSpreads = filteredSpreads.filter(s => {
+          const callOIMeets = (s.callOpenInterest1 >= minOpenInterest && s.callOpenInterest2 >= minOpenInterest);
+          const putOIMeets = (s.putOpenInterest1 >= minOpenInterest && s.putOpenInterest2 >= minOpenInterest);
+          const callVolMeets = (s.callVolume1 >= minVolume && s.callVolume2 >= minVolume);
+          const putVolMeets = (s.putVolume1 >= minVolume && s.putVolume2 >= minVolume);
+          
+          // At least one option type (call or put) must meet the criteria
+          return (callOIMeets && callVolMeets) || (putOIMeets && putVolMeets);
+        });
+        console.log(`Filtered to ${filteredSpreads.length} spreads (applied liquidity filters)`);
       }
 
       // Sort by FF descending and take top 10
@@ -1959,6 +2041,36 @@ export default function ForwardVolCalculator() {
                     </span>
                   </div>
 
+                  {/* Liquidity Filters */}
+                  <div className="flex items-center gap-4 mb-3 pb-3 border-b border-opacity-30" style={{ borderColor: darkMode ? '#ffffff40' : '#00000020' }}>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm">Min Open Interest:</label>
+                      <input
+                        type="number"
+                        value={minOpenInterest}
+                        onChange={(e) => setMinOpenInterest(parseInt(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 text-xs rounded border"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm">Min Volume:</label>
+                      <input
+                        type="number"
+                        value={minVolume}
+                        onChange={(e) => setMinVolume(parseInt(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 text-xs rounded border"
+                        placeholder="0"
+                      />
+                    </div>
+                    <button
+                      onClick={() => scanCalendarSpreads()}
+                      className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                    >
+                      Apply Filters
+                    </button>
+                  </div>
+
                   {scanningForSpreads ? (
                     <p className="text-sm opacity-75">Analyzing expiration combinations...</p>
                   ) : recommendedSpreads.length > 0 ? (
@@ -2004,6 +2116,15 @@ export default function ForwardVolCalculator() {
                               </div>
                               <div className="text-xs opacity-75">
                                 Call Spread: ${spread.callSpread}
+                              </div>
+                              <div className="text-xs opacity-75">
+                                Put Spread: ${spread.putSpread}
+                              </div>
+                              <div className="text-xs opacity-50 mt-1">
+                                <div>Call OI: {spread.callOpenInterest1} → {spread.callOpenInterest2}</div>
+                                <div>Put OI: {spread.putOpenInterest1} → {spread.putOpenInterest2}</div>
+                                <div>Call Vol: {spread.callVolume1} → {spread.callVolume2}</div>
+                                <div>Put Vol: {spread.putVolume1} → {spread.putVolume2}</div>
                               </div>
                               <button
                                 onClick={(e) => {
