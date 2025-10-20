@@ -610,7 +610,7 @@ export default function ForwardVolCalculator() {
 
       // Fetch snapshots for all 20 days in parallel (no rate limit!)
       const promises = tradingDays.map(date =>
-        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?date=${date}&limit=1000&apiKey=${apiKey}`)
+        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date=${date}&limit=1000&apiKey=${apiKey}`)
           .then(res => res.json())
           .catch(err => {
             console.log(`Failed to fetch snapshot for ${date}:`, err);
