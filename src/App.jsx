@@ -234,18 +234,26 @@ export default function ForwardVolCalculator() {
   };
 
   const fetchMarketScan = async () => {
+    console.log('🔍 Starting market scan...');
     setLoadingMarketScan(true);
     try {
+      console.log('📡 Fetching /api/market-scan...');
       const response = await fetch('/api/market-scan');
+      console.log('📡 Response status:', response.status);
       const data = await response.json();
+      console.log('📡 Response data:', data);
       if (data.success) {
+        console.log('✅ Market scan successful, setting results:', data.results.length, 'stocks');
         setMarketScanResults(data.results);
         setLastMarketScan(data.lastScan);
+      } else {
+        console.log('❌ Market scan failed:', data);
       }
     } catch (error) {
-      console.error('Error fetching market scan:', error);
+      console.error('❌ Error fetching market scan:', error);
     }
     setLoadingMarketScan(false);
+    console.log('🔍 Market scan completed');
   };
 
   const fetchOptionData = async (tickerSymbol) => {
