@@ -284,14 +284,9 @@ export default function ForwardVolCalculator() {
       // Save API key to localStorage
       localStorage.setItem('polygonKey', apiKey);
 
-      // 1. Get previous close (most recent available data)
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const dateStr = yesterday.toISOString().split('T')[0];
-
-      const quoteUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${apiKey}`;
-      console.log('Fetching quote from Polygon.io...');
+      // 1. Get current price (real-time data)
+      const quoteUrl = `https://api.polygon.io/v2/last/trade/${symbol}?apiKey=${apiKey}`;
+      console.log('Fetching current price from Polygon.io...');
 
       const quoteResponse = await fetch(quoteUrl);
 
@@ -306,12 +301,12 @@ export default function ForwardVolCalculator() {
         throw new Error(quoteData.error || 'Invalid ticker symbol');
       }
 
-      if (!quoteData.results || quoteData.results.length === 0) {
+      if (!quoteData.results) {
         throw new Error('No price data available for this ticker');
       }
 
-      const result = quoteData.results[0];
-      const currentPrice = result.c; // closing price
+      const result = quoteData.results;
+      const currentPrice = result.p; // last trade price
 
       if (!currentPrice || currentPrice <= 0) {
         throw new Error('No valid price data available');
