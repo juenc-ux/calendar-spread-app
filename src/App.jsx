@@ -1557,16 +1557,16 @@ export default function ForwardVolCalculator() {
 
   // Auto-update IV values when expiration dates change
   useEffect(() => {
-    if (symbol && date1 && date2) {
+    if (ticker && date1 && date2) {
       console.log('Expiration dates changed, updating IV values...');
       
       // Update IV1 for date1
       if (date1) {
         const expDate1 = new Date(date1);
         const expDateStr1 = expDate1.toISOString().split('T')[0];
-        console.log(`Fetching IV for ${symbol} on ${expDateStr1}...`);
+        console.log(`Fetching IV for ${ticker} on ${expDateStr1}...`);
         
-        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDateStr1}&expiration_date.lte=${expDateStr1}&contract_type=call&limit=250&apiKey=${apiKey}`)
+        fetch(`https://api.polygon.io/v3/snapshot/options/${ticker}?expiration_date.gte=${expDateStr1}&expiration_date.lte=${expDateStr1}&contract_type=call&limit=250&apiKey=${apiKey}`)
           .then(response => response.json())
           .then(data => {
             if (data.status === 'OK' && data.results && data.results.length > 0) {
@@ -1616,9 +1616,9 @@ export default function ForwardVolCalculator() {
       if (date2) {
         const expDate2 = new Date(date2);
         const expDateStr2 = expDate2.toISOString().split('T')[0];
-        console.log(`Fetching IV for ${symbol} on ${expDateStr2}...`);
+        console.log(`Fetching IV for ${ticker} on ${expDateStr2}...`);
         
-        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDateStr2}&expiration_date.lte=${expDateStr2}&contract_type=call&limit=250&apiKey=${apiKey}`)
+        fetch(`https://api.polygon.io/v3/snapshot/options/${ticker}?expiration_date.gte=${expDateStr2}&expiration_date.lte=${expDateStr2}&contract_type=call&limit=250&apiKey=${apiKey}`)
           .then(response => response.json())
           .then(data => {
             if (data.status === 'OK' && data.results && data.results.length > 0) {
@@ -1664,7 +1664,7 @@ export default function ForwardVolCalculator() {
           .catch(error => console.warn('Failed to fetch IV2:', error));
       }
     }
-  }, [symbol, date1, date2, spotPrice, apiKey]);
+  }, [ticker, date1, date2, spotPrice, apiKey]);
 
   // Check if earnings overlaps with strategy dates
   useEffect(() => {
