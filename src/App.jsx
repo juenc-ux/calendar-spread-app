@@ -1410,7 +1410,7 @@ export default function ForwardVolCalculator() {
                     {ticker && (
                       <div className="flex items-center gap-2">
                         <img
-                          src={`https://api.logokit.com/stock/${ticker}?api_token=pk_fr93b6bfb5c425f6e3db62`}
+                          src={`https://img.logokit.com/ticker/${ticker}?token=pk_fr93b6bfb5c425f6e3db62&format=png`}
                           alt={ticker}
                           className="w-8 h-8 rounded-lg object-contain"
                           onError={(e) => {
@@ -1745,7 +1745,7 @@ export default function ForwardVolCalculator() {
                                   {trade.ticker && trade.ticker !== 'N/A' && (
                                     <>
                                       <img
-                                        src={`https://api.logokit.com/stock/${trade.ticker}?api_token=pk_fr93b6bfb5c425f6e3db62`}
+                                        src={`https://img.logokit.com/ticker/${trade.ticker}?token=pk_fr93b6bfb5c425f6e3db62&format=png`}
                                         alt={trade.ticker}
                                         className="w-6 h-6 rounded object-contain"
                                         onError={(e) => {
