@@ -1,9 +1,6 @@
 // Vercel Serverless Function: Proxy für Yahoo Finance Earnings
 // Umgeht CORS-Probleme durch Server-Side Fetch
 
-// Import fetch for Node.js environments that don't have it natively
-import fetch from 'node-fetch';
-
 export default async (req, res) => {
   // CORS-Header erlauben
   res.setHeader('Access-Control-Allow-Origin', '*');
