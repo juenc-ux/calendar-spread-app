@@ -61,7 +61,7 @@ export default function ForwardVolCalculator() {
   const [marketScanResults, setMarketScanResults] = useState([]);
   const [loadingMarketScan, setLoadingMarketScan] = useState(false);
   const [lastMarketScan, setLastMarketScan] = useState(null);
-  const [minOpenInterest, setMinOpenInterest] = useState(0);
+  const [minOpenInterest, setMinOpenInterest] = useState(100);
   const [minVolume, setMinVolume] = useState(0);
   const [recentTickers, setRecentTickers] = useState(() => {
     const saved = localStorage.getItem(`recentTickers_${currentUser}`);
