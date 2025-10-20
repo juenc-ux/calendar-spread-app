@@ -828,6 +828,7 @@ export default function ForwardVolCalculator() {
             }
           }
         }
+        }
         return null;
       });
 
@@ -2165,7 +2166,7 @@ export default function ForwardVolCalculator() {
                                 {new Date(spread.date1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(spread.date2).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </span>
                               <span className="ml-2 text-xs opacity-75">
-                                ({spread.dte1} → {spread.dte2} DTE)
+                                ({Math.floor(spread.dte1)} → {Math.floor(spread.dte2)} DTE)
                               </span>
                               {spread.isPostEarnings && (
                                 <span className="ml-2 px-2 py-0.5 text-[10px] font-semibold rounded bg-orange-500 text-white" title="Front expiration is after earnings">
