@@ -837,6 +837,37 @@ export default function ForwardVolCalculator() {
               strike: strike1, // Use the selected strike from delta-based selection
               isPostEarnings: isPostEarnings
             });
+          } else {
+            // Invalid IV combination - Forward Vol would be imaginary
+            const strike1 = exp1.strike || Math.round(S / 5) * 5;
+            const strike2 = exp2.strike || Math.round(S / 5) * 5;
+            
+            // Calculate call spread price using the selected strikes
+            const callT1 = getOptionPrice(S, strike1, T1, r, v1, q, true);
+            const callT2 = getOptionPrice(S, strike2, T2, r, v2, q, true);
+            const callSpread = callT2 - callT1;
+
+            // Check if front expiration is after earnings
+            let isPostEarnings = false;
+            if (nextEarningsDate) {
+              const earningsDate = new Date(nextEarningsDate);
+              const frontExpDate = new Date(exp1.date);
+              // Post-earnings if front exp is after earnings
+              isPostEarnings = frontExpDate > earningsDate;
+            }
+
+            spreads.push({
+              date1: exp1.date,
+              date2: exp2.date,
+              dte1: Math.floor(daysToExp1),
+              dte2: Math.floor(daysToExp2),
+              ff: '∞', // Infinity symbol for invalid IV combination
+              iv1: (v1 * 100).toFixed(2),
+              iv2: (v2 * 100).toFixed(2),
+              callSpread: callSpread.toFixed(2),
+              strike: strike1,
+              isPostEarnings: isPostEarnings
+            });
           }
         }
       }
@@ -1935,7 +1966,9 @@ export default function ForwardVolCalculator() {
                             setStrikePrice(spread.strike.toString());
                           }}
                           className={`w-full text-left p-3 rounded transition-all hover:scale-[1.02] ${
-                            parseFloat(spread.ff) >= 30
+                            spread.ff === '∞'
+                              ? darkMode ? 'bg-red-900 hover:bg-red-800' : 'bg-red-100 hover:bg-red-200'
+                              : parseFloat(spread.ff) >= 30
                               ? darkMode ? 'bg-green-900 hover:bg-green-800' : 'bg-green-100 hover:bg-green-200'
                               : parseFloat(spread.ff) >= 16
                               ? darkMode ? 'bg-yellow-900 hover:bg-yellow-800' : 'bg-yellow-100 hover:bg-yellow-200'
@@ -1959,7 +1992,7 @@ export default function ForwardVolCalculator() {
                             </div>
                             <div className="text-right">
                               <div className="text-2xl font-bold">
-                                FF: {spread.ff.toFixed(2)}%
+                                FF: {spread.ff === '∞' ? '∞' : `${spread.ff.toFixed(2)}%`}
                               </div>
                               <div className="text-xs opacity-75">
                                 Call Spread: ${spread.callSpread}
