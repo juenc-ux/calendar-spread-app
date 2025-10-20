@@ -31,9 +31,25 @@ export default function ForwardVolCalculator() {
   const [volumeCallT2, setVolumeCallT2] = useState(null);
   const [oiCallT1, setOiCallT1] = useState(null);
   const [oiCallT2, setOiCallT2] = useState(null);
-  const [availableExpirations, setAvailableExpirations] = useState([]);
+  const [availableExpirations, setAvailableExpirations] = useState(() => {
+    // Default: next 50 Fridays
+    const today = new Date();
+    const fridays = [];
+    let currentDate = new Date(today);
+
+    while (fridays.length < 50) {
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (currentDate.getDay() === 5) {
+        fridays.push(currentDate.toISOString().split('T')[0]);
+      }
+    }
+
+    return fridays;
+  });
   const [marketCap, setMarketCap] = useState(null);
   const [avgOptionsVolume, setAvgOptionsVolume] = useState(null);
+  const [recommendedSpreads, setRecommendedSpreads] = useState([]);
+  const [scanningForSpreads, setScanningForSpreads] = useState(false);
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -409,6 +425,9 @@ export default function ForwardVolCalculator() {
       // Auto-calculate after loading data
       setTimeout(() => calculateResults(), 100);
 
+      // Scan for best calendar spreads
+      setTimeout(() => scanCalendarSpreads(), 500);
+
     } catch (error) {
       console.error('Error fetching option data:', error);
       setLoadError(error.message || 'Failed to load option data');
@@ -477,13 +496,127 @@ export default function ForwardVolCalculator() {
     }
   };
 
+  // Scan all expiration combinations to find highest FF spreads
+  const scanCalendarSpreads = async () => {
+    if (!ticker || !apiKey || availableExpirations.length < 2) return;
+
+    setScanningForSpreads(true);
+    setRecommendedSpreads([]);
+
+    try {
+      const symbol = ticker.toUpperCase().trim();
+      const S = parseFloat(spotPrice);
+      const K = Math.round(S / 5) * 5; // ATM strike
+      const r = parseFloat(riskFreeRate) / 100;
+      const q = parseFloat(dividend) / 100;
+
+      // Fetch IV data for up to first 20 expirations (to avoid too many API calls)
+      const expsToScan = availableExpirations.slice(0, 20);
+      console.log(`Scanning ${expsToScan.length} expirations for best calendar spreads...`);
+
+      // Fetch IV for all expirations in parallel
+      const ivPromises = expsToScan.map(async (expDate) => {
+        try {
+          const chainUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`;
+          const response = await fetch(chainUrl);
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+              const atmCall = data.results
+                .filter(opt => opt.details?.strike_price && Math.abs(opt.details.strike_price - K) < 20)
+                .sort((a, b) => Math.abs(a.details.strike_price - K) - Math.abs(b.details.strike_price - K))[0];
+
+              if (atmCall && atmCall.implied_volatility > 0) {
+                return { date: expDate, iv: atmCall.implied_volatility };
+              }
+            }
+          }
+        } catch (error) {
+          console.log(`Error fetching IV for ${expDate}:`, error);
+        }
+        return null;
+      });
+
+      const ivResults = (await Promise.all(ivPromises)).filter(r => r !== null);
+
+      if (ivResults.length < 2) {
+        console.log('Not enough IV data to scan spreads');
+        setScanningForSpreads(false);
+        return;
+      }
+
+      // Calculate FF for all combinations
+      const spreads = [];
+      const now = new Date();
+
+      for (let i = 0; i < ivResults.length - 1; i++) {
+        for (let j = i + 1; j < ivResults.length; j++) {
+          const exp1 = ivResults[i];
+          const exp2 = ivResults[j];
+
+          const d1 = new Date(exp1.date + 'T16:00:00-04:00');
+          const d2 = new Date(exp2.date + 'T16:00:00-04:00');
+
+          const daysToExp1 = (d1 - now) / (1000 * 60 * 60 * 24);
+          const daysToExp2 = (d2 - now) / (1000 * 60 * 60 * 24);
+
+          if (daysToExp1 <= 0 || daysToExp2 <= 0) continue;
+
+          const T1 = daysToExp1 / 365;
+          const T2 = daysToExp2 / 365;
+
+          const v1 = exp1.iv;
+          const v2 = exp2.iv;
+
+          const numerator = (T2 * v2 * v2) - (T1 * v1 * v1);
+          const denominator = T2 - T1;
+
+          if (numerator > 0 && denominator > 0) {
+            const forwardVol = Math.sqrt(numerator / denominator);
+            const ff = ((v1 / forwardVol) - 1) * 100;
+
+            // Calculate call spread price
+            const callT1 = getOptionPrice(S, K, T1, r, v1, q, true);
+            const callT2 = getOptionPrice(S, K, T2, r, v2, q, true);
+            const callSpread = callT2 - callT1;
+
+            spreads.push({
+              date1: exp1.date,
+              date2: exp2.date,
+              dte1: Math.floor(daysToExp1),
+              dte2: Math.floor(daysToExp2),
+              ff: ff,
+              iv1: (v1 * 100).toFixed(2),
+              iv2: (v2 * 100).toFixed(2),
+              callSpread: callSpread.toFixed(2),
+              strike: K
+            });
+          }
+        }
+      }
+
+      // Sort by FF descending and take top 10
+      spreads.sort((a, b) => b.ff - a.ff);
+      const topSpreads = spreads.slice(0, 10);
+
+      console.log(`Found ${spreads.length} valid spreads, showing top 10`);
+      setRecommendedSpreads(topSpreads);
+
+    } catch (error) {
+      console.error('Error scanning calendar spreads:', error);
+    }
+
+    setScanningForSpreads(false);
+  };
+
   // Calculate DTE (Days to Expiration) for a given date
   const calculateDTE = (expirationDate) => {
     const expDate = new Date(expirationDate + 'T16:00:00-04:00'); // 4 PM EST
     const now = new Date();
     const diffMs = expDate - now;
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    return Math.max(0, diffDays).toFixed(1);
+    return Math.max(0, Math.floor(diffDays));
   };
 
   // Function to update IV based on selected expiration date
@@ -1269,6 +1402,140 @@ export default function ForwardVolCalculator() {
             </div>
 
             <div className="lg:col-span-3 space-y-4">
+              {result && !result.error && (
+                <div className={`sticky top-0 z-40 px-4 py-2 rounded-lg shadow-md flex items-center justify-between ${
+                  darkMode ? 'bg-gray-800' : 'bg-white'
+                }`}>
+                  <div className="flex items-center gap-4">
+                    {ticker && (
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={`https://api.logokit.com/stock/${ticker}?api_token=pk_fr93b6bfb5c425f6e3db62`}
+                          alt={ticker}
+                          className="w-8 h-8 rounded-lg object-contain"
+                          onError={(e) => {
+                            // Fallback to colored circle with letter if logo fails
+                            e.target.style.display = 'none';
+                            e.target.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                        <div className={`w-8 h-8 rounded-full hidden items-center justify-center font-bold text-white ${
+                          ticker[0] <= 'F' ? 'bg-blue-500' :
+                          ticker[0] <= 'L' ? 'bg-purple-500' :
+                          ticker[0] <= 'R' ? 'bg-green-500' :
+                          ticker[0] <= 'W' ? 'bg-orange-500' : 'bg-red-500'
+                        }`}>
+                          {ticker[0]}
+                        </div>
+                        <span className="font-bold">{ticker}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-xs opacity-75">Forward Vol:</span>
+                      <span className="ml-2 text-lg font-bold text-green-600">{result.forwardVolPct}%</span>
+                    </div>
+                    <div className={`px-3 py-1 rounded ${
+                      parseFloat(result.forwardFactor) >= 30
+                        ? 'bg-green-100 text-green-900'
+                        : parseFloat(result.forwardFactor) >= 16
+                        ? 'bg-yellow-100 text-yellow-900'
+                        : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-900'
+                    }`}>
+                      <span className="text-xs opacity-75">FF:</span>
+                      <span className="ml-2 text-xl font-bold">{result.forwardFactor}%</span>
+                    </div>
+                  </div>
+                  <div className="text-xs opacity-75">
+                    {result.daysToExp1}-{result.daysToExp2} DTE
+                  </div>
+                </div>
+              )}
+
+              {/* Recommended Calendar Spreads */}
+              {(scanningForSpreads || recommendedSpreads.length > 0) && (
+                <div className={`border-2 ${borderClass} p-4 rounded-lg ${
+                  darkMode ? 'bg-purple-900' : 'bg-purple-50'
+                }`}>
+                  <div className="flex justify-between items-center mb-3">
+                    <p className="font-semibold text-lg">
+                      📊 Recommended Calendar Spreads
+                      {ticker && ` for ${ticker}`}
+                    </p>
+                    {scanningForSpreads && (
+                      <span className={`text-xs ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                        Scanning...
+                      </span>
+                    )}
+                  </div>
+
+                  {scanningForSpreads ? (
+                    <p className="text-sm opacity-75">Analyzing expiration combinations...</p>
+                  ) : recommendedSpreads.length > 0 ? (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {recommendedSpreads.map((spread, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setDate1(spread.date1);
+                            setDate2(spread.date2);
+                            setIv1(spread.iv1);
+                            setIv2(spread.iv2);
+                            setStrikePrice(spread.strike.toString());
+                          }}
+                          className={`w-full text-left p-3 rounded transition-all hover:scale-[1.02] ${
+                            parseFloat(spread.ff) >= 30
+                              ? darkMode ? 'bg-green-900 hover:bg-green-800' : 'bg-green-100 hover:bg-green-200'
+                              : parseFloat(spread.ff) >= 16
+                              ? darkMode ? 'bg-yellow-900 hover:bg-yellow-800' : 'bg-yellow-100 hover:bg-yellow-200'
+                              : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-bold text-lg">#{idx + 1}</span>
+                              <span className="ml-3 font-semibold">
+                                {new Date(spread.date1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(spread.date2).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                              <span className="ml-2 text-xs opacity-75">
+                                ({spread.dte1} → {spread.dte2} DTE)
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold">
+                                FF: {spread.ff.toFixed(2)}%
+                              </div>
+                              <div className="text-xs opacity-75">
+                                Call Spread: ${spread.callSpread}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs mt-2 opacity-75 flex gap-4">
+                            <span>IV: {spread.iv1}% → {spread.iv2}%</span>
+                            <span>Strike: ${spread.strike}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm opacity-75">No spreads found</p>
+                  )}
+
+                  <button
+                    onClick={scanCalendarSpreads}
+                    disabled={scanningForSpreads || !ticker || !apiKey}
+                    className={`w-full mt-3 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                      scanningForSpreads || !ticker || !apiKey
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : darkMode
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'bg-purple-500 hover:bg-purple-600 text-white'
+                    }`}
+                  >
+                    {scanningForSpreads ? 'Scanning...' : 'Rescan for Best Spreads'}
+                  </button>
+                </div>
+              )}
+
               {result && (
                 <>
                   {result.error ? (
@@ -1283,7 +1550,7 @@ export default function ForwardVolCalculator() {
                           <p className="text-3xl font-bold">{result.forwardVolPct}%</p>
                           <p className="text-xs mt-2 opacity-75">{result.daysToExp1}-{result.daysToExp2} DTE</p>
                         </div>
-                        
+
                         <div className={`border-4 p-4 rounded-lg ${getFFColor(result.forwardFactor)}`}>
                           <p className="text-xs mb-1 opacity-75">Forward Faktor</p>
                           <p className="text-3xl font-bold">{result.forwardFactor}%</p>
@@ -1468,13 +1735,36 @@ export default function ForwardVolCalculator() {
                           <div className="text-sm space-y-2 max-h-96 overflow-y-auto">
                             {tradeHistory.map((trade, idx) => (
                               <div key={idx} className={`p-3 rounded ${
-                                parseFloat(trade.ff) >= 30 
+                                parseFloat(trade.ff) >= 30
                                   ? darkMode ? 'bg-green-900' : 'bg-green-100'
                                   : parseFloat(trade.ff) >= 16
                                   ? darkMode ? 'bg-yellow-900' : 'bg-yellow-100'
                                   : darkMode ? 'bg-gray-700' : 'bg-gray-100'
                               }`}>
-                                <div className="font-semibold">{trade.ticker} - {trade.date} | FF: {trade.ff.toFixed(2)}%</div>
+                                <div className="flex items-center gap-2 font-semibold mb-2">
+                                  {trade.ticker && trade.ticker !== 'N/A' && (
+                                    <>
+                                      <img
+                                        src={`https://api.logokit.com/stock/${trade.ticker}?api_token=pk_fr93b6bfb5c425f6e3db62`}
+                                        alt={trade.ticker}
+                                        className="w-6 h-6 rounded object-contain"
+                                        onError={(e) => {
+                                          e.target.style.display = 'none';
+                                          e.target.nextElementSibling.style.display = 'flex';
+                                        }}
+                                      />
+                                      <div className={`w-6 h-6 rounded-full hidden items-center justify-center text-xs font-bold text-white ${
+                                        trade.ticker[0] <= 'F' ? 'bg-blue-500' :
+                                        trade.ticker[0] <= 'L' ? 'bg-purple-500' :
+                                        trade.ticker[0] <= 'R' ? 'bg-green-500' :
+                                        trade.ticker[0] <= 'W' ? 'bg-orange-500' : 'bg-red-500'
+                                      }`}>
+                                        {trade.ticker[0]}
+                                      </div>
+                                    </>
+                                  )}
+                                  <span>{trade.ticker} - {trade.date} | FF: {trade.ff.toFixed(2)}%</span>
+                                </div>
                                 <div className="text-xs mt-1 space-y-1">
                                   <div>Aktuell: Call ${parseFloat(trade.callSpreadCurrent).toFixed(4)} | Put ${parseFloat(trade.putSpreadCurrent).toFixed(4)}</div>
                                   <div>@ FF 30%: Call ${parseFloat(trade.callSpreadFF30).toFixed(4)} | Put ${parseFloat(trade.putSpreadFF30).toFixed(4)}</div>
