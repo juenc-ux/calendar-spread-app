@@ -696,36 +696,19 @@ export default function ForwardVolCalculator() {
               );
               
               if (calls.length > 0) {
-                // First try: Delta-based selection (if Greeks available)
+                // Always use the closest strike to current price (ATM-based)
                 const maxDistance = S < 10 ? 5 : 100; // $5 for stocks under $10, $100 for others
-                let sortedCalls = calls.filter(opt => 
-                  opt.greeks?.delta && 
-                  Math.abs(opt.greeks.delta - 0.5) < 0.3 && // Delta between 0.2 and 0.8
-                  Math.abs(opt.details.strike_price - atmStrike) < maxDistance
-                );
-                
-                if (sortedCalls.length > 0) {
-                  // Sort by delta closest to 0.5
-                  sortedCalls.sort((a, b) => {
-                    const deltaA = Math.abs(a.greeks.delta - 0.5);
-                    const deltaB = Math.abs(b.greeks.delta - 0.5);
-                    return deltaA - deltaB;
+                const sortedCalls = calls
+                  .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < maxDistance)
+                  .sort((a, b) => {
+                    const distA = Math.abs(a.details.strike_price - atmStrike);
+                    const distB = Math.abs(b.details.strike_price - atmStrike);
+                    return distA - distB;
                   });
-                } else {
-                  // Fallback: ATM-based selection
-                  sortedCalls = calls
-                    .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < maxDistance)
-                    .sort((a, b) => {
-                      const distA = Math.abs(a.details.strike_price - atmStrike);
-                      const distB = Math.abs(b.details.strike_price - atmStrike);
-                      return distA - distB;
-                    });
-                }
 
                 const selectedCall = sortedCalls[0];
                 if (selectedCall && selectedCall.implied_volatility > 0) {
-                  const selectionType = selectedCall.greeks?.delta ? 'delta-based' : 'ATM-based';
-                  console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}% (${selectionType})`);
+                  console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}% (closest to ATM)`);
                   return { 
                     date: expDate, 
                     iv: selectedCall.implied_volatility,
