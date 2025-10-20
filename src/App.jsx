@@ -1647,7 +1647,17 @@ export default function ForwardVolCalculator() {
                         }`}>
                           {ticker[0]}
                         </div>
-                        <span className="font-bold">{ticker}</span>
+                        <div className="flex flex-col">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-bold">{ticker}</span>
+                            {spotPrice && (
+                              <span className={`text-lg font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                                ${parseFloat(spotPrice).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] opacity-50">Data delayed 15 min</span>
+                        </div>
                       </div>
                     )}
                     <div>
