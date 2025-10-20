@@ -2034,7 +2034,7 @@ export default function ForwardVolCalculator() {
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] opacity-50">Data delayed 15 min</span>
+                          <span className="text-[10px] opacity-50">Options data 15 min delayed, stock price last close</span>
                         </div>
                       </div>
                     )}
