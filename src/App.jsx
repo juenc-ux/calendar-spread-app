@@ -683,14 +683,26 @@ export default function ForwardVolCalculator() {
 
       // Fetch IV for all expirations in parallel (both calls and puts)
       const ivPromises = expsToScan.map(async (expDate, index) => {
-        try {
-          console.log(`[${index + 1}/${expsToScan.length}] Fetching IV for ${expDate}...`);
-          
-          // Fetch both calls and puts
-          const [callsResponse, putsResponse] = await Promise.all([
-            fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`),
-            fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=put&limit=250&apiKey=${apiKey}`)
-          ]);
+        const maxRetries = 2;
+        let retryCount = 0;
+        
+        while (retryCount <= maxRetries) {
+          try {
+            console.log(`[${index + 1}/${expsToScan.length}] Fetching IV for ${expDate}${retryCount > 0 ? ` (retry ${retryCount})` : ''}...`);
+            
+            // Add timeout for API calls
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('API timeout')), 15000)
+            );
+            
+            // Fetch both calls and puts with timeout
+            const [callsResponse, putsResponse] = await Promise.race([
+              Promise.all([
+                fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`),
+                fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=put&limit=250&apiKey=${apiKey}`)
+              ]),
+              timeoutPromise
+            ]);
 
           console.log(`  → Calls response status: ${callsResponse.status}`);
           console.log(`  → Puts response status: ${putsResponse.status}`);
@@ -800,8 +812,21 @@ export default function ForwardVolCalculator() {
               console.warn(`  ✗ Puts error: ${errorText.substring(0, 200)}...`);
             }
           }
-        } catch (error) {
-          console.error(`  ✗ Exception for ${expDate}:`, error.message);
+          } catch (error) {
+            retryCount++;
+            if (retryCount <= maxRetries) {
+              console.warn(`  ⚠️ Attempt ${retryCount} failed for ${expDate}: ${error.message}. Retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+              continue;
+            } else {
+              if (error.message === 'API timeout') {
+                console.warn(`  ⏰ Timeout for ${expDate} after ${maxRetries} retries - skipping`);
+              } else {
+                console.error(`  ✗ Exception for ${expDate} after ${maxRetries} retries:`, error.message);
+              }
+              break;
+            }
+          }
         }
         return null;
       });
@@ -1986,7 +2011,7 @@ export default function ForwardVolCalculator() {
                         </div>
                         <div className="flex flex-col">
                           <div className="flex items-baseline gap-2">
-                            <span className="font-bold">{ticker}</span>
+                        <span className="font-bold">{ticker}</span>
                             {spotPrice && (
                               <span className={`text-lg font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
                                 ${parseFloat(spotPrice).toFixed(2)}
@@ -2156,7 +2181,7 @@ export default function ForwardVolCalculator() {
                                 <div className="flex justify-between">
                                   <span>Call: ${spread.callSpread}</span>
                                   <span>Put: ${spread.putSpread}</span>
-                                </div>
+                              </div>
                               </div>
                               <div className="text-sm font-bold mb-1">
                                 <div className="flex justify-between">
@@ -2549,7 +2574,7 @@ export default function ForwardVolCalculator() {
                   <p className="text-sm opacity-75 text-center">
                     Scan tickers to build your watchlist
                   </p>
-                </div>
+          </div>
               ) : (
                 <div className="space-y-2">
                   {watchlist.map((item, idx) => (
@@ -2577,11 +2602,11 @@ export default function ForwardVolCalculator() {
                               SPREAD
                             </span>
                             <span className="font-bold">{item.symbol}</span>
-                          </div>
+        </div>
                           
                           <div className="text-sm mb-2">
                             {new Date(item.date1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(item.date2).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
+      </div>
                           
                           <div className="flex items-center justify-between">
                             <div>
@@ -2736,7 +2761,7 @@ export default function ForwardVolCalculator() {
         </div>
       </div>
 
-      <Analytics />
+      <Analytics /> 
     </div>
   );
 }
