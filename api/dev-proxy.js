@@ -1,5 +1,15 @@
-// Vercel Serverless Function: Earnings via Finnhub API
-// Finnhub ist speziell für Entwickler - kein CORS, keine Rate-Limits!
+// Local development proxy for earnings API
+// Mimics Vercel serverless function locally
+// Run with: node api/dev-proxy.js
+
+const express = require('express');
+const cors = require('cors');
+
+const app = express();
+const PORT = 3001;
+
+// Enable CORS for localhost:3000
+app.use(cors());
 
 const FINNHUB_API_KEY = 'd3r3mvpr01qopgh6r57gd3r3mvpr01qopgh6r580';
 
@@ -7,19 +17,7 @@ const FINNHUB_API_KEY = 'd3r3mvpr01qopgh6r57gd3r3mvpr01qopgh6r580';
 const cache = new Map();
 const CACHE_TTL = 60 * 1000; // 60 seconds
 
-export default async (req, res) => {
-  // CORS-Header erlauben
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  // Handle OPTIONS request (CORS preflight)
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  // Hole Symbol aus Query-Parameter
+app.get('/api/earnings', async (req, res) => {
   const { symbol } = req.query;
 
   if (!symbol) {
@@ -116,4 +114,10 @@ export default async (req, res) => {
       error: error.message
     });
   }
-};
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Dev proxy running on http://localhost:${PORT}`);
+  console.log(`   API endpoint: http://localhost:${PORT}/api/earnings?symbol=TSLA`);
+});
+

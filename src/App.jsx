@@ -53,6 +53,11 @@ export default function ForwardVolCalculator() {
   const [scanningForSpreads, setScanningForSpreads] = useState(false);
   const [nextEarningsDate, setNextEarningsDate] = useState(null);
   const [earningsTime, setEarningsTime] = useState(null);
+  const [earningsConflict, setEarningsConflict] = useState(null);
+  const [recentTickers, setRecentTickers] = useState(() => {
+    const saved = localStorage.getItem('recentTickers');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -157,6 +162,14 @@ export default function ForwardVolCalculator() {
 
     // Auto-calculate
     setTimeout(() => calculateResults(), 100);
+  };
+
+  // Add ticker to recent tickers list
+  const addToRecentTickers = (symbol) => {
+    const upperSymbol = symbol.toUpperCase().trim();
+    const updated = [upperSymbol, ...recentTickers.filter(t => t !== upperSymbol)].slice(0, 6);
+    setRecentTickers(updated);
+    localStorage.setItem('recentTickers', JSON.stringify(updated));
   };
 
   const fetchOptionData = async (tickerSymbol) => {
@@ -439,6 +452,9 @@ export default function ForwardVolCalculator() {
 
       // Scan for best calendar spreads
       setTimeout(() => scanCalendarSpreads(), 500);
+
+      // Add to recent tickers on successful load
+      addToRecentTickers(symbol);
 
     } catch (error) {
       console.error('Error fetching option data:', error);
@@ -1173,6 +1189,30 @@ export default function ForwardVolCalculator() {
     }
   }, [date1, date2, iv1, iv2, spotPrice, strikePrice, riskFreeRate, dividend, pricingModel]);
 
+  // Check if earnings overlaps with strategy dates
+  useEffect(() => {
+    if (!nextEarningsDate || !date1 || !date2) {
+      setEarningsConflict(null);
+      return;
+    }
+
+    const earningsDate = new Date(nextEarningsDate);
+    const strategyStart = new Date(date1);
+    const strategyEnd = new Date(date2);
+
+    // Check if earnings falls within strategy window (inclusive)
+    if (earningsDate >= strategyStart && earningsDate <= strategyEnd) {
+      const daysUntilEarnings = Math.ceil((earningsDate - new Date()) / (1000 * 60 * 60 * 24));
+      setEarningsConflict({
+        date: nextEarningsDate,
+        timing: earningsTime,
+        daysAway: daysUntilEarnings
+      });
+    } else {
+      setEarningsConflict(null);
+    }
+  }, [nextEarningsDate, earningsTime, date1, date2]);
+
   const bgClass = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
   const cardClass = darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900';
   const borderClass = darkMode ? 'border-gray-700' : 'border-gray-200';
@@ -1267,6 +1307,10 @@ export default function ForwardVolCalculator() {
                           fetchOptionData(ticker);
                         } else if (e.key === 'Escape') {
                           setShowTickerDropdown(false);
+                        } else if (e.key === 'ArrowDown') {
+                          if (ticker.length > 0) {
+                            handleTickerChange(ticker);
+                          }
                         }
                       }}
                       className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
@@ -1324,6 +1368,32 @@ export default function ForwardVolCalculator() {
                     Loading stock data...
                   </p>
                 )}
+                
+                {/* Recent Tickers */}
+                {recentTickers.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs opacity-75 mb-1">Recent:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {recentTickers.map((recentTicker) => (
+                        <button
+                          key={recentTicker}
+                          onClick={() => {
+                            setTicker(recentTicker);
+                            fetchOptionData(recentTicker);
+                          }}
+                          className={`px-2 py-1 text-xs rounded font-medium transition-colors ${
+                            darkMode
+                              ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                          }`}
+                        >
+                          {recentTicker}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={loadDemoData}
                   className={`w-full mt-2 px-4 py-2 rounded-lg font-semibold text-xs ${
@@ -1395,6 +1465,32 @@ export default function ForwardVolCalculator() {
                         })()}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Earnings Overlap Warning */}
+                {earningsConflict && (
+                  <div className={`mt-3 p-3 rounded-lg border-2 ${
+                    darkMode
+                      ? 'bg-red-900 border-red-600'
+                      : 'bg-red-50 border-red-400'
+                  }`}>
+                    <p className="text-xs font-semibold mb-1">⚠️ Earnings During Strategy</p>
+                    <p className="text-xs">
+                      Earnings on <span className="font-bold">{new Date(earningsConflict.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span> falls within your selected dates.
+                    </p>
+                    {earningsConflict.timing && (
+                      <p className="text-xs opacity-75 mt-1">
+                        {earningsConflict.timing}
+                      </p>
+                    )}
+                    <p className="text-xs opacity-75 mt-1">
+                      {earningsConflict.daysAway > 0 
+                        ? `${earningsConflict.daysAway} days away` 
+                        : earningsConflict.daysAway === 0 
+                          ? 'Today!' 
+                          : `${Math.abs(earningsConflict.daysAway)} days ago`}
+                    </p>
                   </div>
                 )}
               </div>
