@@ -660,7 +660,6 @@ export default function ForwardVolCalculator() {
       console.log('=== SCAN START ===');
       console.log('Ticker:', symbol);
       console.log('Spot Price:', S);
-      console.log('ATM Strike:', K);
       console.log('Available expirations:', availableExpirations.length);
       console.log('Will scan first:', expsToScan.length);
       console.log('Expirations to scan:', expsToScan);
