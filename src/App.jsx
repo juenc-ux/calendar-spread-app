@@ -687,7 +687,8 @@ export default function ForwardVolCalculator() {
             
             if (data.status === 'OK' && data.results && data.results.length > 0) {
               // Find strike closest to 0.5 delta, fallback to ATM
-              const atmStrike = Math.round(S / 5) * 5;
+              // For stocks under $10, use $1 increments, otherwise $5 increments
+              const atmStrike = S < 10 ? Math.round(S) : Math.round(S / 5) * 5;
               const calls = data.results.filter(opt => 
                 opt.details?.strike_price && 
                 opt.details?.contract_type === 'call' &&
@@ -696,10 +697,11 @@ export default function ForwardVolCalculator() {
               
               if (calls.length > 0) {
                 // First try: Delta-based selection (if Greeks available)
+                const maxDistance = S < 10 ? 5 : 100; // $5 for stocks under $10, $100 for others
                 let sortedCalls = calls.filter(opt => 
                   opt.greeks?.delta && 
                   Math.abs(opt.greeks.delta - 0.5) < 0.3 && // Delta between 0.2 and 0.8
-                  Math.abs(opt.details.strike_price - atmStrike) < 100 // Within $100 of ATM
+                  Math.abs(opt.details.strike_price - atmStrike) < maxDistance
                 );
                 
                 if (sortedCalls.length > 0) {
@@ -712,7 +714,7 @@ export default function ForwardVolCalculator() {
                 } else {
                   // Fallback: ATM-based selection
                   sortedCalls = calls
-                    .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < 100)
+                    .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < maxDistance)
                     .sort((a, b) => {
                       const distA = Math.abs(a.details.strike_price - atmStrike);
                       const distB = Math.abs(b.details.strike_price - atmStrike);
