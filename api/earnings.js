@@ -1,5 +1,7 @@
-// Vercel Serverless Function: Proxy für Yahoo Finance Earnings
-// Umgeht CORS-Probleme durch Server-Side Fetch
+// Vercel Serverless Function: Earnings via Finnhub API
+// Finnhub ist speziell für Entwickler - kein CORS, keine Rate-Limits!
+
+const FINNHUB_API_KEY = 'd3r3mvpr01qopgh6r57gd3r3mvpr01qopgh6r580';
 
 export default async (req, res) => {
   // CORS-Header erlauben
@@ -23,51 +25,57 @@ export default async (req, res) => {
   try {
     console.log('📊 Fetching earnings for:', symbol);
 
-    // Yahoo Finance API aufrufen (Server-Side, kein CORS!)
-    const yahooUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=calendarEvents`;
+    // Berechne Zeitraum: heute bis +90 Tage
+    const today = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(today.getDate() + 90);
+
+    const fromDate = today.toISOString().split('T')[0];
+    const toDate = futureDate.toISOString().split('T')[0];
+
+    // Finnhub Earnings Calendar API
+    const finnhubUrl = `https://finnhub.io/api/v1/calendar/earnings?from=${fromDate}&to=${toDate}&symbol=${symbol}&token=${FINNHUB_API_KEY}`;
     
-    const response = await fetch(yahooUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://finance.yahoo.com/',
-        'Origin': 'https://finance.yahoo.com'
-      }
-    });
+    console.log('Fetching from Finnhub:', finnhubUrl.replace(FINNHUB_API_KEY, 'KEY_HIDDEN'));
+
+    const response = await fetch(finnhubUrl);
 
     if (!response.ok) {
-      throw new Error(`Yahoo Finance API error: ${response.status}`);
+      throw new Error(`Finnhub API error: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('Finnhub response:', data);
 
-    // Earnings-Daten extrahieren
-    if (data.quoteSummary?.result?.[0]?.calendarEvents?.earnings) {
-      const earnings = data.quoteSummary.result[0].calendarEvents.earnings;
-      
-      if (earnings.earningsDate && earnings.earningsDate.length > 0) {
-        const timestamp = earnings.earningsDate[0].raw;
-        const earningsDate = new Date(timestamp * 1000).toISOString().split('T')[0];
+    // Finnhub gibt ein Object mit "earningsCalendar" array zurück
+    if (data.earningsCalendar && data.earningsCalendar.length > 0) {
+      // Finde das nächste Earnings Date für dieses Symbol
+      const earningsEvents = data.earningsCalendar
+        .filter(e => e.symbol === symbol.toUpperCase())
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      if (earningsEvents.length > 0) {
+        const nextEarnings = earningsEvents[0];
         
-        // Timing bestimmen (Before/After Market)
-        let timeInfo = '';
-        if (earnings.earningsTime) {
-          const time = earnings.earningsTime.toLowerCase();
-          if (time.includes('bmo') || time.includes('before')) {
+        // Bestimme Timing (Before/After Market)
+        let timeInfo = 'Scheduled';
+        if (nextEarnings.hour) {
+          const hour = nextEarnings.hour.toLowerCase();
+          if (hour.includes('bmo') || hour.includes('before')) {
             timeInfo = 'Before Market Open';
-          } else if (time.includes('amc') || time.includes('after')) {
+          } else if (hour.includes('amc') || hour.includes('after')) {
             timeInfo = 'After Market Close';
           } else {
-            timeInfo = earnings.earningsTime;
+            timeInfo = nextEarnings.hour;
           }
         }
 
         return res.status(200).json({
           success: true,
-          earningsDate,
-          earningsTime: timeInfo || 'Scheduled'
+          earningsDate: nextEarnings.date,
+          earningsTime: timeInfo,
+          quarter: nextEarnings.quarter,
+          year: nextEarnings.year
         });
       }
     }
