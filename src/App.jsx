@@ -686,34 +686,44 @@ export default function ForwardVolCalculator() {
             console.log(`  → API Status: ${data.status}, Results: ${data.results?.length || 0}`);
             
             if (data.status === 'OK' && data.results && data.results.length > 0) {
-              // Find strike closest to 0.5 delta (or -0.5 delta for puts)
-              // For now, use ATM strike as fallback, but prioritize delta-based selection
+              // Find strike closest to 0.5 delta, fallback to ATM
               const atmStrike = Math.round(S / 5) * 5;
-              const calls = data.results.filter(opt => opt.details?.strike_price && opt.details?.contract_type === 'call');
+              const calls = data.results.filter(opt => 
+                opt.details?.strike_price && 
+                opt.details?.contract_type === 'call' &&
+                opt.implied_volatility > 0
+              );
               
               if (calls.length > 0) {
-                // Sort by distance from ATM, then by delta closest to 0.5
-                const sortedCalls = calls
-                  .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < 50) // Within $50 of ATM
-                  .sort((a, b) => {
-                    // First priority: closest to ATM
-                    const distA = Math.abs(a.details.strike_price - atmStrike);
-                    const distB = Math.abs(b.details.strike_price - atmStrike);
-                    if (Math.abs(distA - distB) > 5) {
-                      return distA - distB;
-                    }
-                    // Second priority: delta closest to 0.5 (if available)
-                    if (a.greeks?.delta && b.greeks?.delta) {
-                      const deltaA = Math.abs(a.greeks.delta - 0.5);
-                      const deltaB = Math.abs(b.greeks.delta - 0.5);
-                      return deltaA - deltaB;
-                    }
-                    return distA - distB;
+                // First try: Delta-based selection (if Greeks available)
+                let sortedCalls = calls.filter(opt => 
+                  opt.greeks?.delta && 
+                  Math.abs(opt.greeks.delta - 0.5) < 0.3 && // Delta between 0.2 and 0.8
+                  Math.abs(opt.details.strike_price - atmStrike) < 100 // Within $100 of ATM
+                );
+                
+                if (sortedCalls.length > 0) {
+                  // Sort by delta closest to 0.5
+                  sortedCalls.sort((a, b) => {
+                    const deltaA = Math.abs(a.greeks.delta - 0.5);
+                    const deltaB = Math.abs(b.greeks.delta - 0.5);
+                    return deltaA - deltaB;
                   });
+                } else {
+                  // Fallback: ATM-based selection
+                  sortedCalls = calls
+                    .filter(opt => Math.abs(opt.details.strike_price - atmStrike) < 100)
+                    .sort((a, b) => {
+                      const distA = Math.abs(a.details.strike_price - atmStrike);
+                      const distB = Math.abs(b.details.strike_price - atmStrike);
+                      return distA - distB;
+                    });
+                }
 
                 const selectedCall = sortedCalls[0];
                 if (selectedCall && selectedCall.implied_volatility > 0) {
-                  console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}%`);
+                  const selectionType = selectedCall.greeks?.delta ? 'delta-based' : 'ATM-based';
+                  console.log(`  ✓ Found call at strike ${selectedCall.details.strike_price}, IV: ${(selectedCall.implied_volatility * 100).toFixed(2)}% (${selectionType})`);
                   return { 
                     date: expDate, 
                     iv: selectedCall.implied_volatility,
@@ -723,7 +733,7 @@ export default function ForwardVolCalculator() {
                 }
               }
               
-              console.log(`  ✗ No suitable call found for ${expDate}`);
+              console.log(`  ✗ No suitable call found for ${expDate} (${calls.length} calls available)`);
             } else {
               console.log(`  ✗ No valid results in response`);
             }
