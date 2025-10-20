@@ -285,6 +285,7 @@ export default function ForwardVolCalculator() {
       localStorage.setItem('polygonKey', apiKey);
 
       // 1. Get current price (real-time data)
+      const today = new Date();
       const quoteUrl = `https://api.polygon.io/v2/last/trade/${symbol}?apiKey=${apiKey}`;
       console.log('Fetching current price from Polygon.io...');
 
