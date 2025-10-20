@@ -813,7 +813,7 @@ export default function ForwardVolCalculator() {
               console.warn(`  ✗ Puts error: ${errorText.substring(0, 200)}...`);
             }
           }
-          } catch (error) {
+        } catch (error) {
             retryCount++;
             if (retryCount <= maxRetries) {
               console.warn(`  ⚠️ Attempt ${retryCount} failed for ${expDate}: ${error.message}. Retrying...`);
@@ -1771,8 +1771,8 @@ export default function ForwardVolCalculator() {
                       loading
                         ? 'bg-gray-400 cursor-not-allowed'
                         : darkMode
-                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-purple-500 hover:bg-purple-600 text-white'
+                        ? 'bg-slate-600 hover:bg-slate-700 text-white'
+                        : 'bg-slate-500 hover:bg-slate-600 text-white'
                     }`}
                   >
                     {loading ? '...' : 'Load'}
@@ -2066,7 +2066,7 @@ export default function ForwardVolCalculator() {
               {/* Recommended Calendar Spreads */}
               {(scanningForSpreads || recommendedSpreads.length > 0) && (
                 <div className={`border-2 ${borderClass} p-4 rounded-lg ${
-                  darkMode ? 'bg-purple-900' : 'bg-purple-50'
+                  darkMode ? 'bg-slate-800' : 'bg-slate-50'
                 }`}>
                   <div className="flex justify-between items-center mb-3">
                     <p className="font-semibold text-lg">
@@ -2189,7 +2189,7 @@ export default function ForwardVolCalculator() {
                             spread.ff === '∞'
                               ? darkMode ? 'bg-red-900 hover:bg-red-800' : 'bg-red-100 hover:bg-red-200'
                               : parseFloat(spread.ff) >= 30
-                              ? darkMode ? 'bg-green-900 hover:bg-green-800' : 'bg-green-100 hover:bg-green-200'
+                              ? darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-100 hover:bg-slate-200'
                               : parseFloat(spread.ff) >= 16
                               ? darkMode ? 'bg-yellow-900 hover:bg-yellow-800' : 'bg-yellow-100 hover:bg-yellow-200'
                               : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
@@ -2262,8 +2262,8 @@ export default function ForwardVolCalculator() {
                       scanningForSpreads || !ticker || !apiKey
                         ? 'bg-gray-400 cursor-not-allowed'
                         : darkMode
-                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                        : 'bg-purple-500 hover:bg-purple-600 text-white'
+                        ? 'bg-slate-600 hover:bg-slate-700 text-white'
+                        : 'bg-slate-500 hover:bg-slate-600 text-white'
                     }`}
                   >
                     {scanningForSpreads ? 'Scanning...' : 'Rescan for Best Spreads'}
@@ -2316,7 +2316,7 @@ export default function ForwardVolCalculator() {
                         }}
                         className={`w-full text-left p-3 rounded transition-all hover:scale-[1.01] ${
                           parseFloat(stock.bestFF) >= 30
-                            ? darkMode ? 'bg-green-900 hover:bg-green-800' : 'bg-green-100 hover:bg-green-200'
+                            ? darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-100 hover:bg-slate-200'
                             : parseFloat(stock.bestFF) >= 20
                             ? darkMode ? 'bg-yellow-900 hover:bg-yellow-800' : 'bg-yellow-100 hover:bg-yellow-200'
                             : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
@@ -2364,7 +2364,7 @@ export default function ForwardVolCalculator() {
                   ) : (
                     <>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className={`border-2 border-green-500 p-4 rounded-lg ${darkMode ? 'bg-green-900 text-green-100' : 'bg-green-50 text-green-900'}`}>
+                        <div className={`border-2 border-slate-500 p-4 rounded-lg ${darkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
                           <p className="text-xs mb-1 opacity-75">Forward Volatility</p>
                           <p className="text-3xl font-bold">{result.forwardVolPct}%</p>
                           <p className="text-xs mt-2 opacity-75">{result.daysToExp1}-{result.daysToExp2} DTE</p>
@@ -2543,7 +2543,7 @@ export default function ForwardVolCalculator() {
 
                       <button
                         onClick={exportCSV}
-                        className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2"
+                        className="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2"
                       >
                         <Download size={20} /> Ergebnis als CSV exportieren
                       </button>
@@ -2555,7 +2555,7 @@ export default function ForwardVolCalculator() {
                             {tradeHistory.map((trade, idx) => (
                               <div key={idx} className={`p-3 rounded ${
                                 parseFloat(trade.ff) >= 30
-                                  ? darkMode ? 'bg-green-900' : 'bg-green-100'
+                                  ? darkMode ? 'bg-slate-800' : 'bg-slate-100'
                                   : parseFloat(trade.ff) >= 16
                                   ? darkMode ? 'bg-yellow-900' : 'bg-yellow-100'
                                   : darkMode ? 'bg-gray-700' : 'bg-gray-100'
@@ -2620,8 +2620,8 @@ export default function ForwardVolCalculator() {
                       className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:scale-[1.02] ${
                         item.type === 'spread'
                           ? darkMode
-                            ? 'bg-purple-800 border-purple-600'
-                            : 'bg-purple-50 border-purple-200'
+                            ? 'bg-slate-800 border-slate-600'
+                            : 'bg-slate-50 border-slate-200'
                           : ticker === item.symbol
                           ? darkMode
                             ? 'bg-blue-900 border-blue-500'
@@ -2635,7 +2635,7 @@ export default function ForwardVolCalculator() {
                         // Calendar Spread Watchlist Item
                         <div>
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs font-semibold bg-purple-500 text-white px-2 py-0.5 rounded">
+                            <span className="text-xs font-semibold bg-slate-500 text-white px-2 py-0.5 rounded">
                               SPREAD
                             </span>
                             <span className="font-bold">{item.symbol}</span>
