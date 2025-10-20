@@ -25,6 +25,7 @@ export default function ForwardVolCalculator() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [apiKey, setApiKey] = useState(localStorage.getItem('polygonKey') || '');
+  const [fmpApiKey, setFmpApiKey] = useState(localStorage.getItem('fmpKey') || 'FjOgXW2EKCdlZWfAQTwkxja7WGS8RERD');
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
   const [filteredTickers, setFilteredTickers] = useState([]);
   const [volumeCallT1, setVolumeCallT1] = useState(null);
@@ -50,6 +51,8 @@ export default function ForwardVolCalculator() {
   const [avgOptionsVolume, setAvgOptionsVolume] = useState(null);
   const [recommendedSpreads, setRecommendedSpreads] = useState([]);
   const [scanningForSpreads, setScanningForSpreads] = useState(false);
+  const [nextEarningsDate, setNextEarningsDate] = useState(null);
+  const [earningsTime, setEarningsTime] = useState(null);
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -169,6 +172,10 @@ export default function ForwardVolCalculator() {
 
     setLoading(true);
     setLoadError(null);
+    
+    // Reset earnings data when loading new ticker
+    setNextEarningsDate(null);
+    setEarningsTime(null);
 
     try {
       const symbol = tickerSymbol.toUpperCase().trim();
@@ -296,6 +303,11 @@ export default function ForwardVolCalculator() {
       if (avgVol !== null) {
         setAvgOptionsVolume(avgVol);
       }
+
+      // 4.6. Fetch earnings date
+      console.log('About to fetch earnings date...');
+      await fetchEarningsDate(symbol, apiKey);
+      console.log('Earnings fetch completed');
 
       // 5. Set ATM strike (rounded to nearest $5)
       const roundedStrike = Math.round(currentPrice / 5) * 5;
@@ -432,6 +444,47 @@ export default function ForwardVolCalculator() {
       console.error('Error fetching option data:', error);
       setLoadError(error.message || 'Failed to load option data');
       setLoading(false);
+    }
+  };
+
+  // Fetch next earnings date using our serverless API (bypasses CORS)
+  const fetchEarningsDate = async (symbol, apiKey) => {
+    try {
+      console.log('📊 Fetching earnings date for:', symbol);
+      
+      // Use our serverless API endpoint (works both locally and deployed)
+      const apiUrl = `/api/earnings?symbol=${symbol}`;
+      console.log('Fetching from API:', apiUrl);
+      
+      const response = await fetch(apiUrl);
+      console.log('API response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('API data received:', data);
+        
+        if (data.success && data.earningsDate) {
+          setNextEarningsDate(data.earningsDate);
+          setEarningsTime(data.earningsTime || 'Scheduled');
+          console.log('✅ Successfully set earnings date:', data.earningsDate, data.earningsTime);
+          return;
+        } else {
+          console.log('No earnings data in response');
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('API error:', response.status, errorData);
+      }
+      
+      // If no earnings found
+      setNextEarningsDate(null);
+      setEarningsTime(null);
+      console.log('ℹ️ No upcoming earnings found for', symbol);
+      
+    } catch (error) {
+      console.error('❌ Error fetching earnings date:', error);
+      setNextEarningsDate(null);
+      setEarningsTime(null);
     }
   };
 
@@ -1190,6 +1243,7 @@ export default function ForwardVolCalculator() {
                 </a>
               </div>
 
+
               <div className="relative">
                 <label className="block text-sm font-semibold mb-2">Ticker Symbol</label>
                 <div className="flex gap-2">
@@ -1282,7 +1336,7 @@ export default function ForwardVolCalculator() {
                 </button>
 
                 {/* Market Info Display */}
-                {(marketCap !== null || avgOptionsVolume !== null) && (
+                {(marketCap !== null || avgOptionsVolume !== null || nextEarningsDate !== null) && (
                   <div className={`mt-3 p-3 rounded-lg border-2 ${
                     darkMode
                       ? 'bg-gray-700 border-gray-600'
@@ -1307,6 +1361,40 @@ export default function ForwardVolCalculator() {
                         </div>
                       )}
                     </div>
+                    {nextEarningsDate !== null && (
+                      <div className={`mt-2 p-2 rounded border ${
+                        darkMode
+                          ? 'bg-yellow-900 border-yellow-600'
+                          : 'bg-yellow-100 border-yellow-400'
+                      }`}>
+                        <p className="text-xs font-semibold mb-1">📊 Next Earnings</p>
+                        <p className="font-bold">
+                          {new Date(nextEarningsDate).toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric' 
+                          })}
+                        </p>
+                        {earningsTime && (
+                          <p className="text-xs opacity-75 mt-1">
+                            {earningsTime}
+                          </p>
+                        )}
+                        {(() => {
+                          const daysAway = Math.floor((new Date(nextEarningsDate) - new Date()) / (1000 * 60 * 60 * 24));
+                          return (
+                            <p className="text-xs opacity-75 mt-1">
+                              {daysAway > 0 
+                                ? `${daysAway} days away` 
+                                : daysAway === 0 
+                                  ? 'Today!' 
+                                  : `${Math.abs(daysAway)} days ago`}
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
