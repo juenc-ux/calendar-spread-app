@@ -117,6 +117,30 @@ app.get('/api/earnings', async (req, res) => {
   }
 });
 
+// Proxy for Polygon.io API calls
+app.get('/api/polygon/*', async (req, res) => {
+  const polygonPath = req.path.replace('/api/polygon', '');
+  const polygonUrl = `https://api.polygon.io${polygonPath}`;
+  
+  console.log('🔄 Proxying Polygon API call:', polygonUrl.replace(POLYGON_API_KEY, 'KEY_HIDDEN'));
+  
+  try {
+    const response = await fetch(polygonUrl);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('❌ Polygon API error:', response.status, data);
+      return res.status(response.status).json(data);
+    }
+    
+    console.log('✅ Polygon API success:', data.status);
+    res.json(data);
+  } catch (error) {
+    console.error('❌ Polygon proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Market Scanner endpoint (simplified for local dev)
 app.get('/api/market-scan', async (req, res) => {
   console.log('🔍 Market scan requested...');
