@@ -2070,10 +2070,48 @@ export default function ForwardVolCalculator() {
                       />
                     </div>
                     <button
-                      onClick={() => scanCalendarSpreads()}
+                      onClick={() => {
+                        // Just re-filter existing data, don't re-scan
+                        setRecommendedSpreads(prevSpreads => {
+                          let filtered = prevSpreads;
+                          
+                          if (hidePostEarningsSpreads) {
+                            filtered = filtered.filter(s => !s.isPostEarnings);
+                          }
+                          
+                          if (minOpenInterest > 0 || minVolume > 0) {
+                            filtered = filtered.filter(s => {
+                              const callOIMeets = (s.callOpenInterest1 >= minOpenInterest && s.callOpenInterest2 >= minOpenInterest);
+                              const putOIMeets = (s.putOpenInterest1 >= minOpenInterest && s.putOpenInterest2 >= minOpenInterest);
+                              const callVolMeets = (s.callVolume1 >= minVolume && s.callVolume2 >= minVolume);
+                              const putVolMeets = (s.putVolume1 >= minVolume && s.putVolume2 >= minVolume);
+                              
+                              return (callOIMeets && callVolMeets) || (putOIMeets && putVolMeets);
+                            });
+                          }
+                          
+                          return filtered;
+                        });
+                      }}
                       className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                     >
                       Apply Filters
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (recommendedSpreads.length > 0) {
+                          const bestSpread = recommendedSpreads[0];
+                          setDate1(bestSpread.date1);
+                          setDate2(bestSpread.date2);
+                          setIv1(bestSpread.iv1);
+                          setIv2(bestSpread.iv2);
+                          setStrikePrice(bestSpread.strike.toString());
+                          calculateResults();
+                        }
+                      }}
+                      className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                    >
+                      🎯 Best Play
                     </button>
                   </div>
 
