@@ -581,36 +581,63 @@ export default function ForwardVolCalculator() {
 
       // Fetch IV data for up to first 20 expirations (to avoid too many API calls)
       const expsToScan = availableExpirations.slice(0, 20);
-      console.log(`Scanning ${expsToScan.length} expirations for best calendar spreads...`);
+      
+      console.log('=== SCAN START ===');
+      console.log('Ticker:', symbol);
+      console.log('Spot Price:', S);
+      console.log('ATM Strike:', K);
+      console.log('Available expirations:', availableExpirations.length);
+      console.log('Will scan first:', expsToScan.length);
+      console.log('Expirations to scan:', expsToScan);
 
       // Fetch IV for all expirations in parallel
-      const ivPromises = expsToScan.map(async (expDate) => {
+      const ivPromises = expsToScan.map(async (expDate, index) => {
         try {
+          console.log(`[${index + 1}/${expsToScan.length}] Fetching IV for ${expDate}...`);
           const chainUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDate}&expiration_date.lte=${expDate}&contract_type=call&limit=250&apiKey=${apiKey}`;
           const response = await fetch(chainUrl);
 
+          console.log(`  → Response status: ${response.status}`);
+
           if (response.ok) {
             const data = await response.json();
+            console.log(`  → API Status: ${data.status}, Results: ${data.results?.length || 0}`);
+            
             if (data.status === 'OK' && data.results && data.results.length > 0) {
               const atmCall = data.results
                 .filter(opt => opt.details?.strike_price && Math.abs(opt.details.strike_price - K) < 20)
                 .sort((a, b) => Math.abs(a.details.strike_price - K) - Math.abs(b.details.strike_price - K))[0];
 
               if (atmCall && atmCall.implied_volatility > 0) {
+                console.log(`  ✓ Found ATM call at strike ${atmCall.details.strike_price}, IV: ${(atmCall.implied_volatility * 100).toFixed(2)}%`);
                 return { date: expDate, iv: atmCall.implied_volatility };
+              } else {
+                console.log(`  ✗ No ATM call found near strike ${K}`);
               }
+            } else {
+              console.log(`  ✗ No valid results in response`);
             }
+          } else {
+            console.warn(`  ✗ HTTP Error: ${response.status} ${response.statusText}`);
           }
         } catch (error) {
-          console.log(`Error fetching IV for ${expDate}:`, error);
+          console.error(`  ✗ Exception for ${expDate}:`, error.message);
         }
         return null;
       });
 
       const ivResults = (await Promise.all(ivPromises)).filter(r => r !== null);
 
+      console.log('=== IV FETCH COMPLETE ===');
+      console.log(`Successfully fetched IV for ${ivResults.length}/${expsToScan.length} expirations`);
+      console.log('IV Results:', ivResults);
+
       if (ivResults.length < 2) {
-        console.log('Not enough IV data to scan spreads');
+        console.warn('❌ NOT ENOUGH IV DATA');
+        console.warn(`Only ${ivResults.length} expirations had valid IV data`);
+        console.warn('Expirations scanned:', expsToScan);
+        console.warn('IV Results:', ivResults);
+        setLoadError(`Scanner found IV data for only ${ivResults.length}/${expsToScan.length} expirations. Check console for details.`);
         setScanningForSpreads(false);
         return;
       }
@@ -665,15 +692,24 @@ export default function ForwardVolCalculator() {
         }
       }
 
+      console.log('=== CALCULATING SPREADS ===');
+      console.log(`Calculating spreads from ${ivResults.length} expirations...`);
+      console.log(`Generated ${spreads.length} total spreads`);
+
       // Sort by FF descending and take top 10
       spreads.sort((a, b) => b.ff - a.ff);
       const topSpreads = spreads.slice(0, 10);
 
-      console.log(`Found ${spreads.length} valid spreads, showing top 10`);
+      console.log('=== SCAN COMPLETE ===');
+      console.log(`Found ${spreads.length} valid spreads, showing top ${Math.min(10, topSpreads.length)}`);
+      console.log('Top 10 spreads:', topSpreads);
       setRecommendedSpreads(topSpreads);
 
     } catch (error) {
+      console.error('=== SCAN ERROR ===');
       console.error('Error scanning calendar spreads:', error);
+      console.error('Error stack:', error.stack);
+      setLoadError(`Scan failed: ${error.message}`);
     }
 
     setScanningForSpreads(false);
