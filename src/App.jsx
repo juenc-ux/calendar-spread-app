@@ -672,7 +672,7 @@ export default function ForwardVolCalculator() {
       }
 
       // Fetch IV data for up to first 20 expirations (to avoid too many API calls)
-      const expsToScan = availableExpirations.slice(0, 10); // Reduced from 20 to 10 for faster scanning
+      const expsToScan = availableExpirations.slice(0, 15); // Balanced: enough data but not too slow
       
       console.log('=== SCAN START ===');
       console.log('Ticker:', symbol);
@@ -692,7 +692,7 @@ export default function ForwardVolCalculator() {
             
             // Add timeout for API calls
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('API timeout')), 8000) // Reduced from 15s to 8s
+              setTimeout(() => reject(new Error('API timeout')), 10000) // Balanced timeout: not too slow, not too fast
             );
             
             // Fetch both calls and puts with timeout
