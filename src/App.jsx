@@ -828,7 +828,6 @@ export default function ForwardVolCalculator() {
             }
           }
         }
-        }
         return null;
       });
 
