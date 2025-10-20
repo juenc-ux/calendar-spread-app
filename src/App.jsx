@@ -654,6 +654,13 @@ export default function ForwardVolCalculator() {
       const r = parseFloat(riskFreeRate) / 100;
       const q = parseFloat(dividend) / 100;
 
+      // Check if we have enough expirations
+      if (availableExpirations.length < 2) {
+        setLoadError(`Not enough expirations found for ${symbol}. Found ${availableExpirations.length} expirations, need at least 2. This ticker may not have active options trading. Try a major stock like AAPL, TSLA, or SPY.`);
+        setScanningForSpreads(false);
+        return;
+      }
+
       // Fetch IV data for up to first 20 expirations (to avoid too many API calls)
       const expsToScan = availableExpirations.slice(0, 20);
       
@@ -739,7 +746,12 @@ export default function ForwardVolCalculator() {
         console.warn(`Only ${ivResults.length} expirations had valid IV data`);
         console.warn('Expirations scanned:', expsToScan);
         console.warn('IV Results:', ivResults);
-        setLoadError(`Scanner found IV data for only ${ivResults.length}/${expsToScan.length} expirations. Check console for details.`);
+        
+        if (ivResults.length === 0) {
+          setLoadError(`No options data found for ${symbol}. This ticker may not have active options trading. Try a major stock like AAPL, TSLA, or SPY.`);
+        } else {
+          setLoadError(`Scanner found IV data for only ${ivResults.length}/${expsToScan.length} expirations. This ticker may have limited options data. Try a major stock like AAPL, TSLA, or SPY.`);
+        }
         setScanningForSpreads(false);
         return;
       }
