@@ -1555,6 +1555,117 @@ export default function ForwardVolCalculator() {
     }
   }, [date1, date2, iv1, iv2, spotPrice, strikePrice, riskFreeRate, dividend, pricingModel]);
 
+  // Auto-update IV values when expiration dates change
+  useEffect(() => {
+    if (symbol && date1 && date2) {
+      console.log('Expiration dates changed, updating IV values...');
+      
+      // Update IV1 for date1
+      if (date1) {
+        const expDate1 = new Date(date1);
+        const expDateStr1 = expDate1.toISOString().split('T')[0];
+        console.log(`Fetching IV for ${symbol} on ${expDateStr1}...`);
+        
+        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDateStr1}&expiration_date.lte=${expDateStr1}&contract_type=call&limit=250&apiKey=${apiKey}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+              const atmStrike = spotPrice < 10 ? Math.round(spotPrice) : Math.round(spotPrice / 5) * 5;
+              const calls = data.results.filter(opt => 
+                opt.details?.strike_price && 
+                opt.details?.contract_type === 'call' &&
+                opt.implied_volatility > 0
+              );
+              
+              if (calls.length > 0) {
+                const callsWithDelta = calls.filter(opt => opt.greeks?.delta !== undefined);
+                
+                if (callsWithDelta.length > 0) {
+                  const sortedCalls = callsWithDelta.sort((a, b) => {
+                    const deltaA = Math.abs(a.greeks.delta - 0.5);
+                    const deltaB = Math.abs(b.greeks.delta - 0.5);
+                    return deltaA - deltaB;
+                  });
+                  
+                  const selectedCall = sortedCalls[0];
+                  if (selectedCall && selectedCall.implied_volatility > 0) {
+                    setIv1(selectedCall.implied_volatility);
+                    console.log(`Updated IV1 to ${selectedCall.implied_volatility} for ${expDateStr1}`);
+                  }
+                } else {
+                  const sortedCalls = calls
+                    .sort((a, b) => {
+                      const distA = Math.abs(a.details.strike_price - atmStrike);
+                      const distB = Math.abs(b.details.strike_price - atmStrike);
+                      return distA - distB;
+                    });
+                  
+                  const selectedCall = sortedCalls[0];
+                  if (selectedCall && selectedCall.implied_volatility > 0) {
+                    setIv1(selectedCall.implied_volatility);
+                    console.log(`Updated IV1 to ${selectedCall.implied_volatility} for ${expDateStr1} (ATM fallback)`);
+                  }
+                }
+              }
+            }
+          })
+          .catch(error => console.warn('Failed to fetch IV1:', error));
+      }
+      
+      // Update IV2 for date2
+      if (date2) {
+        const expDate2 = new Date(date2);
+        const expDateStr2 = expDate2.toISOString().split('T')[0];
+        console.log(`Fetching IV for ${symbol} on ${expDateStr2}...`);
+        
+        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expDateStr2}&expiration_date.lte=${expDateStr2}&contract_type=call&limit=250&apiKey=${apiKey}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+              const atmStrike = spotPrice < 10 ? Math.round(spotPrice) : Math.round(spotPrice / 5) * 5;
+              const calls = data.results.filter(opt => 
+                opt.details?.strike_price && 
+                opt.details?.contract_type === 'call' &&
+                opt.implied_volatility > 0
+              );
+              
+              if (calls.length > 0) {
+                const callsWithDelta = calls.filter(opt => opt.greeks?.delta !== undefined);
+                
+                if (callsWithDelta.length > 0) {
+                  const sortedCalls = callsWithDelta.sort((a, b) => {
+                    const deltaA = Math.abs(a.greeks.delta - 0.5);
+                    const deltaB = Math.abs(b.greeks.delta - 0.5);
+                    return deltaA - deltaB;
+                  });
+                  
+                  const selectedCall = sortedCalls[0];
+                  if (selectedCall && selectedCall.implied_volatility > 0) {
+                    setIv2(selectedCall.implied_volatility);
+                    console.log(`Updated IV2 to ${selectedCall.implied_volatility} for ${expDateStr2}`);
+                  }
+                } else {
+                  const sortedCalls = calls
+                    .sort((a, b) => {
+                      const distA = Math.abs(a.details.strike_price - atmStrike);
+                      const distB = Math.abs(b.details.strike_price - atmStrike);
+                      return distA - distB;
+                    });
+                  
+                  const selectedCall = sortedCalls[0];
+                  if (selectedCall && selectedCall.implied_volatility > 0) {
+                    setIv2(selectedCall.implied_volatility);
+                    console.log(`Updated IV2 to ${selectedCall.implied_volatility} for ${expDateStr2} (ATM fallback)`);
+                  }
+                }
+              }
+            }
+          })
+          .catch(error => console.warn('Failed to fetch IV2:', error));
+      }
+    }
+  }, [symbol, date1, date2, spotPrice, apiKey]);
+
   // Check if earnings overlaps with strategy dates
   useEffect(() => {
     if (!nextEarningsDate || !date1 || !date2) {
