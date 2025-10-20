@@ -790,9 +790,15 @@ export default function ForwardVolCalculator() {
               console.log(`  ✗ No valid results in response`);
             }
           } else {
-            console.warn(`  ✗ HTTP Error: ${response.status} ${response.statusText}`);
-            const errorText = await response.text();
-            console.warn(`  ✗ Error response: ${errorText.substring(0, 200)}...`);
+            console.warn(`  ✗ HTTP Error: Calls ${callsResponse.status}, Puts ${putsResponse.status}`);
+            if (!callsResponse.ok) {
+              const errorText = await callsResponse.text();
+              console.warn(`  ✗ Calls error: ${errorText.substring(0, 200)}...`);
+            }
+            if (!putsResponse.ok) {
+              const errorText = await putsResponse.text();
+              console.warn(`  ✗ Puts error: ${errorText.substring(0, 200)}...`);
+            }
           }
         } catch (error) {
           console.error(`  ✗ Exception for ${expDate}:`, error.message);
