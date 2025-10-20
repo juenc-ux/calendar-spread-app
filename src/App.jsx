@@ -2110,7 +2110,11 @@ export default function ForwardVolCalculator() {
                         type="number"
                         value={minOpenInterest}
                         onChange={(e) => setMinOpenInterest(parseInt(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 text-xs rounded border"
+                        className={`w-20 px-2 py-1 text-xs rounded border ${
+                          darkMode 
+                            ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' 
+                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                        }`}
                         placeholder="0"
                       />
                     </div>
@@ -2120,7 +2124,11 @@ export default function ForwardVolCalculator() {
                         type="number"
                         value={minVolume}
                         onChange={(e) => setMinVolume(parseInt(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 text-xs rounded border"
+                        className={`w-20 px-2 py-1 text-xs rounded border ${
+                          darkMode 
+                            ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' 
+                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                        }`}
                         placeholder="0"
                       />
                     </div>
@@ -2130,7 +2138,11 @@ export default function ForwardVolCalculator() {
                         type="number"
                         value={maxDTEGap}
                         onChange={(e) => setMaxDTEGap(parseInt(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 text-xs rounded border"
+                        className={`w-20 px-2 py-1 text-xs rounded border ${
+                          darkMode 
+                            ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' 
+                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                        }`}
                         placeholder="200"
                       />
                     </div>
