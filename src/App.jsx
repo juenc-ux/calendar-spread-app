@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { Info, Calendar, Download, Moon, Sun } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar, Download, Moon, Sun } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function ForwardVolCalculator() {
   const [date1, setDate1] = useState('2025-10-24');
@@ -28,6 +27,13 @@ export default function ForwardVolCalculator() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('polygonKey') || '');
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
   const [filteredTickers, setFilteredTickers] = useState([]);
+  const [volumeCallT1, setVolumeCallT1] = useState(null);
+  const [volumeCallT2, setVolumeCallT2] = useState(null);
+  const [oiCallT1, setOiCallT1] = useState(null);
+  const [oiCallT2, setOiCallT2] = useState(null);
+  const [availableExpirations, setAvailableExpirations] = useState([]);
+  const [marketCap, setMarketCap] = useState(null);
+  const [avgOptionsVolume, setAvgOptionsVolume] = useState(null);
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -190,57 +196,202 @@ export default function ForwardVolCalculator() {
 
       setSpotPrice(currentPrice.toFixed(2));
 
-      // 2. Calculate next two Fridays for expirations
-      const fridays = [];
-      let currentDate = new Date(today);
-
-      while (fridays.length < 2) {
-        if (currentDate.getDay() === 5 && currentDate > today) {
-          fridays.push(new Date(currentDate));
+      // 2. Get ticker details (market cap)
+      try {
+        const tickerDetailsUrl = `https://api.polygon.io/v3/reference/tickers/${symbol}?apiKey=${apiKey}`;
+        const tickerDetailsResponse = await fetch(tickerDetailsUrl);
+        if (tickerDetailsResponse.ok) {
+          const tickerDetailsData = await tickerDetailsResponse.json();
+          if (tickerDetailsData.results?.market_cap) {
+            setMarketCap(tickerDetailsData.results.market_cap);
+          }
         }
-        currentDate.setDate(currentDate.getDate() + 1);
+      } catch (error) {
+        console.log('Could not load market cap:', error);
       }
 
-      setDate1(fridays[0].toISOString().split('T')[0]);
-      setDate2(fridays[1].toISOString().split('T')[0]);
+      // 3. Load available expiration dates using Options Contracts Reference API
+      let expirationDates = [];
+      try {
+        console.log('Fetching available expiration dates...');
+        let contractsUrl = `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${symbol}&expired=false&limit=1000&apiKey=${apiKey}`;
+        const allDates = new Set();
 
-      // 3. Set ATM strike (rounded to nearest $5)
+        // Fetch all pages (pagination)
+        while (contractsUrl) {
+          const contractsResponse = await fetch(contractsUrl);
+          if (contractsResponse.ok) {
+            const contractsData = await contractsResponse.json();
+
+            if (contractsData.results && contractsData.results.length > 0) {
+              contractsData.results.forEach(contract => {
+                if (contract.expiration_date) {
+                  allDates.add(contract.expiration_date);
+                }
+              });
+            }
+
+            // Check for next page
+            contractsUrl = contractsData.next_url ? `${contractsData.next_url}&apiKey=${apiKey}` : null;
+          } else {
+            break;
+          }
+        }
+
+        // Sort dates and filter future dates only
+        expirationDates = Array.from(allDates)
+          .sort()
+          .filter(date => new Date(date) > today);
+
+        setAvailableExpirations(expirationDates);
+        console.log(`Found ${expirationDates.length} available expiration dates`);
+      } catch (error) {
+        console.log('Could not load expiration dates:', error);
+      }
+
+      // 4. Set default dates (use first two available, or calculate Fridays as fallback)
+      let exp1Date, exp2Date;
+
+      if (expirationDates.length >= 2) {
+        exp1Date = expirationDates[0];
+        exp2Date = expirationDates[1];
+        setDate1(exp1Date);
+        setDate2(exp2Date);
+      } else {
+        // Fallback: Calculate next two Fridays
+        const fridays = [];
+        let currentDate = new Date(today);
+
+        while (fridays.length < 2) {
+          if (currentDate.getDay() === 5 && currentDate > today) {
+            fridays.push(new Date(currentDate));
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        exp1Date = fridays[0].toISOString().split('T')[0];
+        exp2Date = fridays[1].toISOString().split('T')[0];
+        setDate1(exp1Date);
+        setDate2(exp2Date);
+      }
+
+      // 4.5. Calculate average options volume (20 trading days)
+      const avgVol = await calculateAvgOptionsVolume(symbol, apiKey);
+      if (avgVol !== null) {
+        setAvgOptionsVolume(avgVol);
+      }
+
+      // 5. Set ATM strike (rounded to nearest $5)
       const roundedStrike = Math.round(currentPrice / 5) * 5;
       setStrikePrice(roundedStrike.toFixed(2));
 
-      // 4. Try to get options data (if available in your plan)
-      // Free tier doesn't have options, but we'll try anyway
+      // 6. Try to get options data using Option Chain Snapshot API with date filters
+      let gotRealIV1 = false;
+      let gotRealIV2 = false;
+      let totalVolume = 0;
+      let volumeCount = 0;
+
       try {
-        const optionsUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?apiKey=${apiKey}`;
-        console.log('Trying to fetch options data...');
+        // Fetch expiration 1 options with date filter
+        const chain1Url = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${exp1Date}&expiration_date.lte=${exp1Date}&contract_type=call&limit=250&apiKey=${apiKey}`;
+        console.log('Fetching options chain for expiration 1...');
 
-        const optionsResponse = await fetch(optionsUrl);
+        const chain1Response = await fetch(chain1Url);
 
-        if (optionsResponse.ok) {
-          const optionsData = await optionsResponse.json();
-          console.log('Options data:', optionsData);
+        if (chain1Response.ok) {
+          const chain1Data = await chain1Response.json();
+          console.log('Expiration 1 options data:', chain1Data);
 
-          if (optionsData.results && optionsData.results.length > 0) {
-            // Find ATM options if available
-            const atmOptions = optionsData.results.filter(opt =>
-              Math.abs(opt.details.strike_price - currentPrice) < 10
-            );
+          if (chain1Data.status === 'OK' && chain1Data.results && chain1Data.results.length > 0) {
+            // Find ATM call option - closest to rounded strike
+            const atmCall = chain1Data.results
+              .filter(opt => opt.details?.strike_price && Math.abs(opt.details.strike_price - roundedStrike) < 20)
+              .sort((a, b) => Math.abs(a.details.strike_price - roundedStrike) - Math.abs(b.details.strike_price - roundedStrike))[0];
 
-            if (atmOptions.length > 0 && atmOptions[0].implied_volatility) {
-              setIv1((atmOptions[0].implied_volatility * 100).toFixed(2));
-              setIv2(((atmOptions[0].implied_volatility * 0.95) * 100).toFixed(2));
-              console.log('✅ Got IV from Polygon options data!');
-            } else {
-              throw new Error('No IV in response');
+            if (atmCall) {
+              if (atmCall.implied_volatility !== undefined && atmCall.implied_volatility > 0) {
+                const iv1Value = (atmCall.implied_volatility * 100).toFixed(2);
+                setIv1(iv1Value);
+                gotRealIV1 = true;
+              }
+              if (atmCall.day?.volume !== undefined) {
+                setVolumeCallT1(atmCall.day.volume);
+                totalVolume += atmCall.day.volume;
+                volumeCount++;
+              }
+              if (atmCall.open_interest !== undefined) {
+                setOiCallT1(atmCall.open_interest);
+              }
             }
-          } else {
-            throw new Error('No options results');
+
+            // Calculate average volume from all options in this expiration
+            chain1Data.results.forEach(opt => {
+              if (opt.day?.volume !== undefined && opt.day.volume > 0) {
+                totalVolume += opt.day.volume;
+                volumeCount++;
+              }
+            });
           }
-        } else {
-          throw new Error('Options endpoint not available');
         }
+
+        // Fetch expiration 2 options with date filter
+        const chain2Url = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${exp2Date}&expiration_date.lte=${exp2Date}&contract_type=call&limit=250&apiKey=${apiKey}`;
+        console.log('Fetching options chain for expiration 2...');
+
+        const chain2Response = await fetch(chain2Url);
+
+        if (chain2Response.ok) {
+          const chain2Data = await chain2Response.json();
+          console.log('Expiration 2 options data:', chain2Data);
+
+          if (chain2Data.status === 'OK' && chain2Data.results && chain2Data.results.length > 0) {
+            // Find ATM call option - closest to rounded strike
+            const atmCall = chain2Data.results
+              .filter(opt => opt.details?.strike_price && Math.abs(opt.details.strike_price - roundedStrike) < 20)
+              .sort((a, b) => Math.abs(a.details.strike_price - roundedStrike) - Math.abs(b.details.strike_price - roundedStrike))[0];
+
+            if (atmCall) {
+              if (atmCall.implied_volatility !== undefined && atmCall.implied_volatility > 0) {
+                const iv2Value = (atmCall.implied_volatility * 100).toFixed(2);
+                setIv2(iv2Value);
+                gotRealIV2 = true;
+              }
+              if (atmCall.day?.volume !== undefined) {
+                setVolumeCallT2(atmCall.day.volume);
+                totalVolume += atmCall.day.volume;
+                volumeCount++;
+              }
+              if (atmCall.open_interest !== undefined) {
+                setOiCallT2(atmCall.open_interest);
+              }
+            }
+
+            // Calculate average volume from all options in this expiration
+            chain2Data.results.forEach(opt => {
+              if (opt.day?.volume !== undefined && opt.day.volume > 0) {
+                totalVolume += opt.day.volume;
+                volumeCount++;
+              }
+            });
+          }
+        }
+
+        // Calculate and set average options volume
+        if (volumeCount > 0) {
+          const avgVol = Math.round(totalVolume / volumeCount);
+          setAvgOptionsVolume(avgVol);
+          console.log(`Average options volume: ${avgVol} (from ${volumeCount} contracts)`);
+        }
+
+        // If we didn't get real IV data, use defaults
+        if (!gotRealIV1 || !gotRealIV2) {
+          console.log('Options data not available (expected with free tier), using defaults');
+          if (!gotRealIV1) setIv1('30');
+          if (!gotRealIV2) setIv2('28');
+        }
+
       } catch (optError) {
-        console.log('Options data not available (expected with free tier), using defaults');
+        console.log('Error fetching options data:', optError);
         // Use reasonable defaults based on historical volatility
         setIv1('30');
         setIv2('28');
@@ -249,7 +400,11 @@ export default function ForwardVolCalculator() {
       setLoading(false);
       setLoadError(null);
 
-      console.log('✅ Stock price loaded! IV values are estimates (upgrade for real IV data)');
+      if (gotRealIV1 && gotRealIV2) {
+        console.log('✅ Stock price and real IV data loaded from Polygon.io!');
+      } else {
+        console.log('✅ Stock price loaded! IV values are estimates (upgrade for real IV data)');
+      }
 
       // Auto-calculate after loading data
       setTimeout(() => calculateResults(), 100);
@@ -258,6 +413,129 @@ export default function ForwardVolCalculator() {
       console.error('Error fetching option data:', error);
       setLoadError(error.message || 'Failed to load option data');
       setLoading(false);
+    }
+  };
+
+  // Calculate average options volume over last 20 trading days
+  const calculateAvgOptionsVolume = async (symbol, apiKey) => {
+    try {
+      console.log('Calculating average options volume (20 days)...');
+
+      // Calculate last 20 trading days (skip weekends)
+      const tradingDays = [];
+      let currentDate = new Date();
+
+      while (tradingDays.length < 20) {
+        currentDate.setDate(currentDate.getDate() - 1);
+        const dayOfWeek = currentDate.getDay();
+        // Skip weekends (0 = Sunday, 6 = Saturday)
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          tradingDays.push(currentDate.toISOString().split('T')[0]);
+        }
+      }
+
+      // Fetch snapshots for all 20 days in parallel (no rate limit!)
+      const promises = tradingDays.map(date =>
+        fetch(`https://api.polygon.io/v3/snapshot/options/${symbol}?date=${date}&limit=1000&apiKey=${apiKey}`)
+          .then(res => res.json())
+          .catch(err => {
+            console.log(`Failed to fetch snapshot for ${date}:`, err);
+            return null;
+          })
+      );
+
+      const responses = await Promise.all(promises);
+
+      // Calculate total volume per day, then average across days
+      const dailyVolumes = [];
+
+      responses.forEach((data, index) => {
+        if (data?.results && data.results.length > 0) {
+          let dayTotal = 0;
+          data.results.forEach(opt => {
+            if (opt.day?.volume && opt.day.volume > 0) {
+              dayTotal += opt.day.volume;
+            }
+          });
+          if (dayTotal > 0) {
+            dailyVolumes.push(dayTotal);
+          }
+        }
+      });
+
+      if (dailyVolumes.length > 0) {
+        const totalVolume = dailyVolumes.reduce((sum, vol) => sum + vol, 0);
+        const avgDailyVol = Math.round(totalVolume / dailyVolumes.length);
+        console.log(`Average daily options volume: ${avgDailyVol.toLocaleString()} (from ${dailyVolumes.length} days)`);
+        return avgDailyVol;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error calculating avg options volume:', error);
+      return null;
+    }
+  };
+
+  // Calculate DTE (Days to Expiration) for a given date
+  const calculateDTE = (expirationDate) => {
+    const expDate = new Date(expirationDate + 'T16:00:00-04:00'); // 4 PM EST
+    const now = new Date();
+    const diffMs = expDate - now;
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return Math.max(0, diffDays).toFixed(1);
+  };
+
+  // Function to update IV based on selected expiration date
+  const updateIVForDate = async (expirationDate, isFirstDate) => {
+    if (!ticker || !apiKey || !expirationDate) return;
+
+    try {
+      const symbol = ticker.toUpperCase().trim();
+      const roundedStrike = Math.round(parseFloat(spotPrice) / 5) * 5;
+
+      const chainUrl = `https://api.polygon.io/v3/snapshot/options/${symbol}?expiration_date.gte=${expirationDate}&expiration_date.lte=${expirationDate}&contract_type=call&limit=250&apiKey=${apiKey}`;
+      console.log(`Fetching IV for ${expirationDate}...`);
+
+      const chainResponse = await fetch(chainUrl);
+
+      if (chainResponse.ok) {
+        const chainData = await chainResponse.json();
+
+        if (chainData.status === 'OK' && chainData.results && chainData.results.length > 0) {
+          // Find ATM call option - closest to rounded strike
+          const atmCall = chainData.results
+            .filter(opt => opt.details?.strike_price && Math.abs(opt.details.strike_price - roundedStrike) < 20)
+            .sort((a, b) => Math.abs(a.details.strike_price - roundedStrike) - Math.abs(b.details.strike_price - roundedStrike))[0];
+
+          if (atmCall) {
+            if (atmCall.implied_volatility !== undefined && atmCall.implied_volatility > 0) {
+              const ivValue = (atmCall.implied_volatility * 100).toFixed(2);
+              if (isFirstDate) {
+                setIv1(ivValue);
+              } else {
+                setIv2(ivValue);
+              }
+            }
+            if (atmCall.day?.volume !== undefined) {
+              if (isFirstDate) {
+                setVolumeCallT1(atmCall.day.volume);
+              } else {
+                setVolumeCallT2(atmCall.day.volume);
+              }
+            }
+            if (atmCall.open_interest !== undefined) {
+              if (isFirstDate) {
+                setOiCallT1(atmCall.open_interest);
+              } else {
+                setOiCallT2(atmCall.open_interest);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating IV:', error);
     }
   };
 
@@ -697,6 +975,18 @@ export default function ForwardVolCalculator() {
     a.click();
   };
 
+  // Auto-calculate when parameters change
+  useEffect(() => {
+    // Only auto-calculate if we have all required values
+    if (date1 && date2 && iv1 && iv2 && spotPrice && strikePrice) {
+      const timeoutId = setTimeout(() => {
+        calculateResults();
+      }, 500); // Debounce for 500ms
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [date1, date2, iv1, iv2, spotPrice, strikePrice, riskFreeRate, dividend, pricingModel]);
+
   const bgClass = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
   const cardClass = darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900';
   const borderClass = darkMode ? 'border-gray-700' : 'border-gray-200';
@@ -707,7 +997,14 @@ export default function ForwardVolCalculator() {
         <div className={`${cardClass} rounded-lg shadow-lg p-8`}>
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-4xl font-bold mb-2">Calendar Spread Calculator</h1>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-4xl font-bold">Calendar Spread Calculator</h1>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  darkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-200 text-yellow-800'
+                }`}>
+                  v1.0 BETA
+                </span>
+              </div>
               <p className={darkMode ? 'text-gray-400' : 'text-gray-600'}>Forward Volatility, Forward Factor & Calendar Spread Pricing</p>
             </div>
             <div className="flex gap-3">
@@ -850,38 +1147,93 @@ export default function ForwardVolCalculator() {
                 >
                   Load Demo Data (SPY)
                 </button>
+
+                {/* Market Info Display */}
+                {(marketCap !== null || avgOptionsVolume !== null) && (
+                  <div className={`mt-3 p-3 rounded-lg border-2 ${
+                    darkMode
+                      ? 'bg-gray-700 border-gray-600'
+                      : 'bg-blue-50 border-blue-200'
+                  }`}>
+                    <p className="text-xs font-semibold mb-2">Market Info</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {marketCap !== null && (
+                        <div>
+                          <p className="opacity-75">Market Cap</p>
+                          <p className="font-bold">
+                            ${(marketCap / 1e9).toFixed(2)}B
+                          </p>
+                        </div>
+                      )}
+                      {avgOptionsVolume !== null && (
+                        <div>
+                          <p className="opacity-75">Avg Opt Vol (20d)</p>
+                          <p className="font-bold">
+                            {avgOptionsVolume.toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="relative">
                 <label className="block text-sm font-semibold mb-2">Expiration 1</label>
-                <button
-                  onClick={() => { setShowCalendar1(true); setShowCalendar2(false); }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg flex items-center justify-between ${
-                    darkMode 
-                      ? 'bg-gray-700 border-gray-600 hover:border-blue-400' 
-                      : 'bg-white border-blue-300 hover:border-blue-500'
+                <select
+                  value={date1}
+                  onChange={(e) => {
+                    setDate1(e.target.value);
+                    updateIVForDate(e.target.value, true);
+                  }}
+                  className={`w-full px-4 py-2 border-2 rounded-lg ${
+                    darkMode
+                      ? 'bg-gray-700 border-gray-600 text-white'
+                      : 'bg-white border-blue-300 text-gray-900'
                   }`}
                 >
-                  <span>{new Date(date1).toLocaleDateString('en-US')}</span>
-                  <Calendar className="w-5 h-5" />
-                </button>
-                {renderCalendar(date1, setDate1, showCalendar1, setShowCalendar1)}
+                  {availableExpirations.length > 0 ? (
+                    availableExpirations.map(date => {
+                      const dte = calculateDTE(date);
+                      return (
+                        <option key={date} value={date}>
+                          {new Date(date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })} ({dte} DTE)
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option value={date1}>{new Date(date1).toLocaleDateString('en-US')}</option>
+                  )}
+                </select>
               </div>
 
               <div className="relative">
                 <label className="block text-sm font-semibold mb-2">Expiration 2</label>
-                <button
-                  onClick={() => { setShowCalendar2(true); setShowCalendar1(false); }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg flex items-center justify-between ${
-                    darkMode 
-                      ? 'bg-gray-700 border-gray-600 hover:border-blue-400' 
-                      : 'bg-white border-blue-300 hover:border-blue-500'
+                <select
+                  value={date2}
+                  onChange={(e) => {
+                    setDate2(e.target.value);
+                    updateIVForDate(e.target.value, false);
+                  }}
+                  className={`w-full px-4 py-2 border-2 rounded-lg ${
+                    darkMode
+                      ? 'bg-gray-700 border-gray-600 text-white'
+                      : 'bg-white border-blue-300 text-gray-900'
                   }`}
                 >
-                  <span>{new Date(date2).toLocaleDateString('en-US')}</span>
-                  <Calendar className="w-5 h-5" />
-                </button>
-                {renderCalendar(date2, setDate2, showCalendar2, setShowCalendar2)}
+                  {availableExpirations.length > 0 ? (
+                    availableExpirations.map(date => {
+                      const dte = calculateDTE(date);
+                      return (
+                        <option key={date} value={date}>
+                          {new Date(date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })} ({dte} DTE)
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option value={date2}>{new Date(date2).toLocaleDateString('en-US')}</option>
+                  )}
+                </select>
               </div>
 
               {[
@@ -997,25 +1349,6 @@ export default function ForwardVolCalculator() {
                         </div>
                       </div>
 
-                      <div className={`border-2 ${borderClass} p-4 rounded-lg`}>
-                        <p className="text-sm font-semibold mb-3">Term Structure Visualization</p>
-                        <ResponsiveContainer width="100%" height={250}>
-                          <LineChart data={chartData}>
-                            <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                            <XAxis dataKey="dte" stroke={darkMode ? '#999' : '#666'} />
-                            <YAxis stroke={darkMode ? '#999' : '#666'} />
-                            <Tooltip 
-                              contentStyle={{
-                                backgroundColor: darkMode ? '#333' : '#fff',
-                                border: `1px solid ${darkMode ? '#555' : '#ccc'}`,
-                                color: darkMode ? '#fff' : '#000'
-                              }}
-                            />
-                            <Line type="monotone" dataKey="iv" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div className={`border-2 border-blue-500 p-4 rounded-lg ${darkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-50 text-blue-900'}`}>
                           <p className="font-semibold mb-3">Call Calendar Spread</p>
@@ -1023,10 +1356,22 @@ export default function ForwardVolCalculator() {
                             <div>
                               <p className="text-xs opacity-75">Front (T1)</p>
                               <p className="font-bold">${result.callT1}</p>
+                              {volumeCallT1 !== null && (
+                                <p className="text-xs opacity-60">Vol: {volumeCallT1.toLocaleString()}</p>
+                              )}
+                              {oiCallT1 !== null && (
+                                <p className="text-xs opacity-60">OI: {oiCallT1.toLocaleString()}</p>
+                              )}
                             </div>
                             <div>
                               <p className="text-xs opacity-75">Back (T2)</p>
                               <p className="font-bold">${result.callT2}</p>
+                              {volumeCallT2 !== null && (
+                                <p className="text-xs opacity-60">Vol: {volumeCallT2.toLocaleString()}</p>
+                              )}
+                              {oiCallT2 !== null && (
+                                <p className="text-xs opacity-60">OI: {oiCallT2.toLocaleString()}</p>
+                              )}
                             </div>
                             <div>
                               <p className="text-xs opacity-75">Spread</p>
