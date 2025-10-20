@@ -58,6 +58,11 @@ export default function ForwardVolCalculator() {
     const saved = localStorage.getItem('recentTickers');
     return saved ? JSON.parse(saved) : [];
   });
+  const [watchlist, setWatchlist] = useState(() => {
+    const saved = localStorage.getItem('watchlist');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [hidePostEarningsSpreads, setHidePostEarningsSpreads] = useState(false);
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -170,6 +175,23 @@ export default function ForwardVolCalculator() {
     const updated = [upperSymbol, ...recentTickers.filter(t => t !== upperSymbol)].slice(0, 6);
     setRecentTickers(updated);
     localStorage.setItem('recentTickers', JSON.stringify(updated));
+  };
+
+  const addToWatchlist = (symbol, bestFF, hasEarnings, earningsDate, price) => {
+    const upperSymbol = symbol.toUpperCase().trim();
+    const updated = [
+      {
+        symbol: upperSymbol,
+        bestFF: bestFF,
+        hasEarnings: hasEarnings,
+        earningsDate: earningsDate,
+        price: price,
+        lastUpdated: new Date().toISOString()
+      },
+      ...watchlist.filter(item => item.symbol !== upperSymbol)
+    ].slice(0, 10); // Keep max 10 items
+    setWatchlist(updated);
+    localStorage.setItem('watchlist', JSON.stringify(updated));
   };
 
   const fetchOptionData = async (tickerSymbol) => {
@@ -677,6 +699,15 @@ export default function ForwardVolCalculator() {
             const callT2 = getOptionPrice(S, K, T2, r, v2, q, true);
             const callSpread = callT2 - callT1;
 
+            // Check if front expiration is after earnings
+            let isPostEarnings = false;
+            if (nextEarningsDate) {
+              const earningsDate = new Date(nextEarningsDate);
+              const frontExpDate = new Date(exp1.date);
+              // Post-earnings if front exp is after earnings
+              isPostEarnings = frontExpDate > earningsDate;
+            }
+
             spreads.push({
               date1: exp1.date,
               date2: exp2.date,
@@ -686,7 +717,8 @@ export default function ForwardVolCalculator() {
               iv1: (v1 * 100).toFixed(2),
               iv2: (v2 * 100).toFixed(2),
               callSpread: callSpread.toFixed(2),
-              strike: K
+              strike: K,
+              isPostEarnings: isPostEarnings
             });
           }
         }
@@ -696,14 +728,33 @@ export default function ForwardVolCalculator() {
       console.log(`Calculating spreads from ${ivResults.length} expirations...`);
       console.log(`Generated ${spreads.length} total spreads`);
 
+      // Filter out post-earnings spreads if requested
+      let filteredSpreads = spreads;
+      if (hidePostEarningsSpreads) {
+        filteredSpreads = spreads.filter(s => !s.isPostEarnings);
+        console.log(`Filtered to ${filteredSpreads.length} spreads (removed post-earnings)`);
+      }
+
       // Sort by FF descending and take top 10
-      spreads.sort((a, b) => b.ff - a.ff);
-      const topSpreads = spreads.slice(0, 10);
+      filteredSpreads.sort((a, b) => b.ff - a.ff);
+      const topSpreads = filteredSpreads.slice(0, 10);
 
       console.log('=== SCAN COMPLETE ===');
-      console.log(`Found ${spreads.length} valid spreads, showing top ${Math.min(10, topSpreads.length)}`);
+      console.log(`Found ${filteredSpreads.length} valid spreads, showing top ${Math.min(10, topSpreads.length)}`);
       console.log('Top 10 spreads:', topSpreads);
       setRecommendedSpreads(topSpreads);
+
+      // Add to watchlist with best FF
+      if (topSpreads.length > 0) {
+        const bestSpread = topSpreads[0];
+        addToWatchlist(
+          symbol,
+          bestSpread.ff.toFixed(2),
+          nextEarningsDate !== null,
+          nextEarningsDate,
+          S.toFixed(2)
+        );
+      }
 
     } catch (error) {
       console.error('=== SCAN ERROR ===');
@@ -1292,7 +1343,7 @@ export default function ForwardVolCalculator() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
             <div className="lg:col-span-1 space-y-4">
               <h2 className="text-lg font-bold mb-4">Parameters</h2>
 
@@ -1621,7 +1672,7 @@ export default function ForwardVolCalculator() {
               </button>
             </div>
 
-            <div className="lg:col-span-3 space-y-4">
+            <div className="lg:col-span-4 space-y-4">
               {result && !result.error && (
                 <div className={`sticky top-0 z-40 px-4 py-2 rounded-lg shadow-md flex items-center justify-between ${
                   darkMode ? 'bg-gray-800' : 'bg-white'
@@ -1698,6 +1749,28 @@ export default function ForwardVolCalculator() {
                     )}
                   </div>
 
+                  {/* Filter Toggle */}
+                  <div className="flex items-center gap-2 mb-3 pb-3 border-b border-opacity-30" style={{ borderColor: darkMode ? '#ffffff40' : '#00000020' }}>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={hidePostEarningsSpreads}
+                        onChange={(e) => {
+                          setHidePostEarningsSpreads(e.target.checked);
+                          // Re-trigger scan with new filter
+                          setTimeout(() => scanCalendarSpreads(), 100);
+                        }}
+                        className="w-4 h-4 rounded"
+                      />
+                      <span className="text-sm">
+                        Hide post-earnings front expirations
+                      </span>
+                    </label>
+                    <span className="text-xs opacity-50" title="For pure forward volatility plays, avoid spreads where the front leg expires after earnings">
+                      ℹ️
+                    </span>
+                  </div>
+
                   {scanningForSpreads ? (
                     <p className="text-sm opacity-75">Analyzing expiration combinations...</p>
                   ) : recommendedSpreads.length > 0 ? (
@@ -1729,6 +1802,11 @@ export default function ForwardVolCalculator() {
                               <span className="ml-2 text-xs opacity-75">
                                 ({spread.dte1} → {spread.dte2} DTE)
                               </span>
+                              {spread.isPostEarnings && (
+                                <span className="ml-2 px-2 py-0.5 text-[10px] font-semibold rounded bg-orange-500 text-white" title="Front expiration is after earnings">
+                                  POST-📊
+                                </span>
+                              )}
                             </div>
                             <div className="text-right">
                               <div className="text-2xl font-bold">
@@ -2008,6 +2086,109 @@ export default function ForwardVolCalculator() {
                     </>
                   )}
                 </>
+              )}
+            </div>
+
+            {/* Watchlist Sidebar */}
+            <div className="lg:col-span-1 space-y-4">
+              <h2 className="text-lg font-bold mb-4">Watchlist</h2>
+              
+              {watchlist.length === 0 ? (
+                <div className={`p-4 rounded-lg border-2 ${
+                  darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <p className="text-sm opacity-75 text-center">
+                    Scan tickers to build your watchlist
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {watchlist.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setTicker(item.symbol);
+                        fetchOptionData(item.symbol);
+                      }}
+                      className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:scale-[1.02] ${
+                        ticker === item.symbol
+                          ? darkMode
+                            ? 'bg-blue-900 border-blue-500'
+                            : 'bg-blue-50 border-blue-500'
+                          : darkMode
+                            ? 'bg-gray-800 border-gray-700 hover:bg-gray-700'
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <img
+                          src={`https://img.logokit.com/ticker/${item.symbol}?token=pk_fr93b6bfb5c425f6e3db62&format=png`}
+                          alt={item.symbol}
+                          className="w-6 h-6 rounded object-contain"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                        <span className="font-bold">{item.symbol}</span>
+                        {item.hasEarnings && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-500 text-black" title="Has upcoming earnings">
+                            📊
+                          </span>
+                        )}
+                      </div>
+                      
+                      {item.price && (
+                        <div className="text-sm mb-1">
+                          ${parseFloat(item.price).toFixed(2)}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs opacity-75">Best FF</div>
+                          <div className={`text-lg font-bold ${
+                            parseFloat(item.bestFF) >= 30
+                              ? 'text-green-500'
+                              : parseFloat(item.bestFF) >= 16
+                              ? 'text-yellow-500'
+                              : 'text-gray-500'
+                          }`}>
+                            {item.bestFF}%
+                          </div>
+                        </div>
+                        
+                        {item.hasEarnings && item.earningsDate && (
+                          <div className="text-right">
+                            <div className="text-xs opacity-75">Earnings</div>
+                            <div className="text-xs font-semibold">
+                              {new Date(item.earningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="text-[10px] opacity-50 mt-2">
+                        {new Date(item.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {watchlist.length > 0 && (
+                <button
+                  onClick={() => {
+                    setWatchlist([]);
+                    localStorage.removeItem('watchlist');
+                  }}
+                  className={`w-full px-3 py-2 text-xs rounded transition-all ${
+                    darkMode
+                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                      : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                  }`}
+                >
+                  Clear Watchlist
+                </button>
               )}
             </div>
           </div>
