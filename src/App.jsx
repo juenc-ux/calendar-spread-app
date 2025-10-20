@@ -286,7 +286,7 @@ export default function ForwardVolCalculator() {
 
       // 1. Get current price (real-time data)
       const today = new Date();
-      const quoteUrl = `https://api.polygon.io/v2/last/trade/${symbol}?apiKey=${apiKey}`;
+      const quoteUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${apiKey}`;
       console.log('Fetching current price from Polygon.io...');
 
       const quoteResponse = await fetch(quoteUrl);
@@ -302,12 +302,12 @@ export default function ForwardVolCalculator() {
         throw new Error(quoteData.error || 'Invalid ticker symbol');
       }
 
-      if (!quoteData.results) {
+      if (!quoteData.results || quoteData.results.length === 0) {
         throw new Error('No price data available for this ticker');
       }
 
-      const result = quoteData.results;
-      const currentPrice = result.p; // last trade price
+      const result = quoteData.results[0];
+      const currentPrice = result.c; // closing price
 
       if (!currentPrice || currentPrice <= 0) {
         throw new Error('No valid price data available');
