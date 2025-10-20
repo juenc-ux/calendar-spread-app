@@ -63,7 +63,7 @@ export default function ForwardVolCalculator() {
   const [lastMarketScan, setLastMarketScan] = useState(null);
   const [minOpenInterest, setMinOpenInterest] = useState(100);
   const [minVolume, setMinVolume] = useState(0);
-  const [minDTEGap, setMinDTEGap] = useState(200); // Minimum gap between expirations in days
+  const [maxDTEGap, setMaxDTEGap] = useState(200); // Maximum gap between expirations in days
   const [recentTickers, setRecentTickers] = useState(() => {
     const saved = localStorage.getItem(`recentTickers_${currentUser}`);
     return saved ? JSON.parse(saved) : [];
@@ -1016,12 +1016,12 @@ export default function ForwardVolCalculator() {
       }
 
       // Apply DTE gap filter
-      if (minDTEGap > 0) {
+      if (maxDTEGap > 0) {
         filteredSpreads = filteredSpreads.filter(s => {
           const dteGap = s.dte2 - s.dte1;
-          return dteGap >= minDTEGap;
+          return dteGap <= maxDTEGap;
         });
-        console.log(`Filtered to ${filteredSpreads.length} spreads (applied DTE gap filter: min ${minDTEGap} days)`);
+        console.log(`Filtered to ${filteredSpreads.length} spreads (applied DTE gap filter: max ${maxDTEGap} days)`);
       }
 
       // Sort by FF descending and take top 10
@@ -2125,11 +2125,11 @@ export default function ForwardVolCalculator() {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-sm">Min DTE Gap:</label>
+                      <label className="text-sm">Max DTE Gap:</label>
                       <input
                         type="number"
-                        value={minDTEGap}
-                        onChange={(e) => setMinDTEGap(parseInt(e.target.value) || 0)}
+                        value={maxDTEGap}
+                        onChange={(e) => setMaxDTEGap(parseInt(e.target.value) || 0)}
                         className="w-20 px-2 py-1 text-xs rounded border"
                         placeholder="200"
                       />
@@ -2155,10 +2155,10 @@ export default function ForwardVolCalculator() {
                             });
                           }
                           
-                          if (minDTEGap > 0) {
+                          if (maxDTEGap > 0) {
                             filtered = filtered.filter(s => {
                               const dteGap = s.dte2 - s.dte1;
-                              return dteGap >= minDTEGap;
+                              return dteGap <= maxDTEGap;
                             });
                           }
                           
