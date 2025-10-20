@@ -1,4 +1,7 @@
 {
+  "env": {
+    "POLYGON_API_KEY": "@polygon-api-key"
+  },
   "rewrites": [
     {
       "source": "/api/:path*",

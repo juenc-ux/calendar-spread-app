@@ -54,15 +54,29 @@ export default function ForwardVolCalculator() {
   const [nextEarningsDate, setNextEarningsDate] = useState(null);
   const [earningsTime, setEarningsTime] = useState(null);
   const [earningsConflict, setEarningsConflict] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    return localStorage.getItem('currentUser') || 'Nils';
+  });
+  const [hidePostEarningsSpreads, setHidePostEarningsSpreads] = useState(false);
+  const [marketScanResults, setMarketScanResults] = useState([]);
+  const [loadingMarketScan, setLoadingMarketScan] = useState(false);
+  const [lastMarketScan, setLastMarketScan] = useState(null);
   const [recentTickers, setRecentTickers] = useState(() => {
-    const saved = localStorage.getItem('recentTickers');
+    const saved = localStorage.getItem(`recentTickers_${currentUser}`);
     return saved ? JSON.parse(saved) : [];
   });
   const [watchlist, setWatchlist] = useState(() => {
-    const saved = localStorage.getItem('watchlist');
+    const saved = localStorage.getItem(`watchlist_${currentUser}`);
     return saved ? JSON.parse(saved) : [];
   });
-  const [hidePostEarningsSpreads, setHidePostEarningsSpreads] = useState(false);
+
+  // Reload user-specific data when user changes
+  useEffect(() => {
+    const savedWatchlist = localStorage.getItem(`watchlist_${currentUser}`);
+    const savedRecent = localStorage.getItem(`recentTickers_${currentUser}`);
+    setWatchlist(savedWatchlist ? JSON.parse(savedWatchlist) : []);
+    setRecentTickers(savedRecent ? JSON.parse(savedRecent) : []);
+  }, [currentUser]);
 
   // Popular US stocks for autocomplete
   const popularStocks = [
@@ -174,10 +188,10 @@ export default function ForwardVolCalculator() {
     const upperSymbol = symbol.toUpperCase().trim();
     const updated = [upperSymbol, ...recentTickers.filter(t => t !== upperSymbol)].slice(0, 6);
     setRecentTickers(updated);
-    localStorage.setItem('recentTickers', JSON.stringify(updated));
+    localStorage.setItem(`recentTickers_${currentUser}`, JSON.stringify(updated));
   };
 
-  const addToWatchlist = (symbol, bestFF, hasEarnings, earningsDate, price) => {
+  const addToWatchlist = (symbol, bestFF, hasEarnings, earningsDate, price, spreadData = null) => {
     const upperSymbol = symbol.toUpperCase().trim();
     const updated = [
       {
@@ -186,12 +200,52 @@ export default function ForwardVolCalculator() {
         hasEarnings: hasEarnings,
         earningsDate: earningsDate,
         price: price,
+        spreadData: spreadData, // Calendar spread details if applicable
         lastUpdated: new Date().toISOString()
       },
       ...watchlist.filter(item => item.symbol !== upperSymbol)
     ].slice(0, 10); // Keep max 10 items
     setWatchlist(updated);
-    localStorage.setItem('watchlist', JSON.stringify(updated));
+    localStorage.setItem(`watchlist_${currentUser}`, JSON.stringify(updated));
+  };
+
+  const addSpreadToWatchlist = (spread) => {
+    const spreadId = `${spread.date1}-${spread.date2}-${spread.strike}`;
+    const updated = [
+      {
+        id: spreadId,
+        type: 'spread',
+        symbol: ticker,
+        date1: spread.date1,
+        date2: spread.date2,
+        dte1: spread.dte1,
+        dte2: spread.dte2,
+        ff: spread.ff,
+        strike: spread.strike,
+        iv1: spread.iv1,
+        iv2: spread.iv2,
+        callSpread: spread.callSpread,
+        lastUpdated: new Date().toISOString()
+      },
+      ...watchlist.filter(item => item.id !== spreadId)
+    ].slice(0, 10); // Keep max 10 items
+    setWatchlist(updated);
+    localStorage.setItem(`watchlist_${currentUser}`, JSON.stringify(updated));
+  };
+
+  const fetchMarketScan = async () => {
+    setLoadingMarketScan(true);
+    try {
+      const response = await fetch('/api/market-scan');
+      const data = await response.json();
+      if (data.success) {
+        setMarketScanResults(data.results);
+        setLastMarketScan(data.lastScan);
+      }
+    } catch (error) {
+      console.error('Error fetching market scan:', error);
+    }
+    setLoadingMarketScan(false);
   };
 
   const fetchOptionData = async (tickerSymbol) => {
@@ -526,10 +580,10 @@ export default function ForwardVolCalculator() {
     }
   };
 
-  // Calculate average options volume over last 20 trading days
+  // Calculate average TOTAL options volume (puts + calls) over last 20 trading days
   const calculateAvgOptionsVolume = async (symbol, apiKey) => {
     try {
-      console.log('Calculating average options volume (20 days)...');
+      console.log('Calculating average TOTAL options volume (puts + calls, 20 days)...');
 
       // Calculate last 20 trading days (skip weekends)
       const tradingDays = [];
@@ -576,7 +630,7 @@ export default function ForwardVolCalculator() {
       if (dailyVolumes.length > 0) {
         const totalVolume = dailyVolumes.reduce((sum, vol) => sum + vol, 0);
         const avgDailyVol = Math.round(totalVolume / dailyVolumes.length);
-        console.log(`Average daily options volume: ${avgDailyVol.toLocaleString()} (from ${dailyVolumes.length} days)`);
+        console.log(`Average daily TOTAL options volume (puts + calls): ${avgDailyVol.toLocaleString()} (from ${dailyVolumes.length} days)`);
         return avgDailyVol;
       }
 
@@ -1306,7 +1360,7 @@ export default function ForwardVolCalculator() {
 
   return (
     <div className={`min-h-screen ${bgClass} p-6`}>
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-[1800px] mx-auto">
         <div className={`${cardClass} rounded-lg shadow-lg p-8`}>
           <div className="flex justify-between items-center mb-8">
             <div>
@@ -1343,7 +1397,39 @@ export default function ForwardVolCalculator() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+          {/* User Profile Selector */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <span className="text-sm opacity-75">User:</span>
+              <div className="flex gap-2">
+                {['Nils', 'Mr. FF'].map((user) => (
+                  <button
+                    key={user}
+                    onClick={() => {
+                      setCurrentUser(user);
+                      localStorage.setItem('currentUser', user);
+                    }}
+                    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                      currentUser === user
+                        ? darkMode
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-500 text-white'
+                        : darkMode
+                          ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                          : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {user}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="text-sm opacity-50">
+              Welcome, {currentUser}!
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
             <div className="lg:col-span-1 space-y-4">
               <h2 className="text-lg font-bold mb-4">Parameters</h2>
 
@@ -1511,7 +1597,7 @@ export default function ForwardVolCalculator() {
                       )}
                       {avgOptionsVolume !== null && (
                         <div>
-                          <p className="opacity-75">Avg Opt Vol (20d)</p>
+                          <p className="opacity-75">Total Opt Vol (20d)</p>
                           <p className="font-bold">
                             {avgOptionsVolume.toLocaleString()}
                           </p>
@@ -1672,7 +1758,7 @@ export default function ForwardVolCalculator() {
               </button>
             </div>
 
-            <div className="lg:col-span-4 space-y-4">
+            <div className="lg:col-span-5 space-y-4">
               {result && !result.error && (
                 <div className={`sticky top-0 z-40 px-4 py-2 rounded-lg shadow-md flex items-center justify-between ${
                   darkMode ? 'bg-gray-800' : 'bg-white'
@@ -1815,6 +1901,16 @@ export default function ForwardVolCalculator() {
                               <div className="text-xs opacity-75">
                                 Call Spread: ${spread.callSpread}
                               </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addSpreadToWatchlist(spread);
+                                }}
+                                className="mt-2 px-2 py-1 text-[10px] bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                title="Add to Watchlist"
+                              >
+                                + Watch
+                              </button>
                             </div>
                           </div>
                           <div className="text-xs mt-2 opacity-75 flex gap-4">
@@ -1843,6 +1939,90 @@ export default function ForwardVolCalculator() {
                   </button>
                 </div>
               )}
+
+              {/* Market-Wide FF Scanner */}
+              <div className={`border-2 ${borderClass} p-4 rounded-lg ${
+                darkMode ? 'bg-indigo-900' : 'bg-indigo-50'
+              }`}>
+                <div className="flex justify-between items-center mb-3">
+                  <p className="font-semibold text-lg">
+                    🔍 Market Scanner: Top FF Opportunities
+                  </p>
+                  <button
+                    onClick={fetchMarketScan}
+                    disabled={loadingMarketScan}
+                    className={`text-xs px-3 py-1 rounded transition-all ${
+                      loadingMarketScan
+                        ? 'bg-gray-400 cursor-not-allowed text-white'
+                        : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                    }`}
+                  >
+                    {loadingMarketScan ? 'Scanning...' : 'Start Market Scan'}
+                  </button>
+                </div>
+                
+                {lastMarketScan && (
+                  <p className="text-xs opacity-75 mb-3">
+                    Last scan: {new Date(lastMarketScan).toLocaleString()}
+                  </p>
+                )}
+                
+                {loadingMarketScan && (
+                  <div className="text-center py-4">
+                    <p className="text-sm opacity-75">Scanning market for best FF opportunities...</p>
+                    <p className="text-xs opacity-50 mt-1">This may take 2-5 minutes</p>
+                  </div>
+                )}
+                
+                {!loadingMarketScan && marketScanResults.length > 0 && (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {marketScanResults.slice(0, 20).map((stock, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setTicker(stock.symbol);
+                          fetchOptionData(stock.symbol);
+                        }}
+                        className={`w-full text-left p-3 rounded transition-all hover:scale-[1.01] ${
+                          parseFloat(stock.bestFF) >= 30
+                            ? darkMode ? 'bg-green-900 hover:bg-green-800' : 'bg-green-100 hover:bg-green-200'
+                            : parseFloat(stock.bestFF) >= 20
+                            ? darkMode ? 'bg-yellow-900 hover:bg-yellow-800' : 'bg-yellow-100 hover:bg-yellow-200'
+                            : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-bold">#{idx + 1} {stock.symbol}</span>
+                            <span className="ml-2 text-xs opacity-75">{stock.name}</span>
+                            {stock.hasEarnings && (
+                              <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-500 text-black" title="Has upcoming earnings">
+                                📊
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xl font-bold">FF: {stock.bestFF}%</div>
+                            <div className="text-xs opacity-75">${stock.price?.toFixed(2)}</div>
+                          </div>
+                        </div>
+                        <div className="text-xs mt-1 opacity-75 flex gap-3">
+                          <span>MC: ${(stock.marketCap / 1e9).toFixed(1)}B</span>
+                          {stock.spread && (
+                            <span>{stock.spread.exp1} → {stock.spread.exp2}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {!loadingMarketScan && marketScanResults.length === 0 && lastMarketScan && (
+                  <p className="text-sm opacity-75 text-center py-4">
+                    No opportunities found. Try running a market scan.
+                  </p>
+                )}
+              </div>
 
               {result && (
                 <>
@@ -2104,14 +2284,14 @@ export default function ForwardVolCalculator() {
               ) : (
                 <div className="space-y-2">
                   {watchlist.map((item, idx) => (
-                    <button
+                    <div
                       key={idx}
-                      onClick={() => {
-                        setTicker(item.symbol);
-                        fetchOptionData(item.symbol);
-                      }}
                       className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:scale-[1.02] ${
-                        ticker === item.symbol
+                        item.type === 'spread'
+                          ? darkMode
+                            ? 'bg-purple-800 border-purple-600'
+                            : 'bg-purple-50 border-purple-200'
+                          : ticker === item.symbol
                           ? darkMode
                             ? 'bg-blue-900 border-blue-500'
                             : 'bg-blue-50 border-blue-500'
@@ -2120,57 +2300,106 @@ export default function ForwardVolCalculator() {
                             : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                       }`}
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <img
-                          src={`https://img.logokit.com/ticker/${item.symbol}?token=pk_fr93b6bfb5c425f6e3db62&format=png`}
-                          alt={item.symbol}
-                          className="w-6 h-6 rounded object-contain"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                        <span className="font-bold">{item.symbol}</span>
-                        {item.hasEarnings && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-500 text-black" title="Has upcoming earnings">
-                            📊
-                          </span>
-                        )}
-                      </div>
-                      
-                      {item.price && (
-                        <div className="text-sm mb-1">
-                          ${parseFloat(item.price).toFixed(2)}
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center justify-between">
+                      {item.type === 'spread' ? (
+                        // Calendar Spread Watchlist Item
                         <div>
-                          <div className="text-xs opacity-75">Best FF</div>
-                          <div className={`text-lg font-bold ${
-                            parseFloat(item.bestFF) >= 30
-                              ? 'text-green-500'
-                              : parseFloat(item.bestFF) >= 16
-                              ? 'text-yellow-500'
-                              : 'text-gray-500'
-                          }`}>
-                            {item.bestFF}%
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-semibold bg-purple-500 text-white px-2 py-0.5 rounded">
+                              SPREAD
+                            </span>
+                            <span className="font-bold">{item.symbol}</span>
                           </div>
-                        </div>
-                        
-                        {item.hasEarnings && item.earningsDate && (
-                          <div className="text-right">
-                            <div className="text-xs opacity-75">Earnings</div>
-                            <div className="text-xs font-semibold">
-                              {new Date(item.earningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          
+                          <div className="text-sm mb-2">
+                            {new Date(item.date1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(item.date2).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs opacity-75">FF</div>
+                              <div className={`text-lg font-bold ${
+                                parseFloat(item.ff) >= 30
+                                  ? 'text-green-500'
+                                  : parseFloat(item.ff) >= 16
+                                  ? 'text-yellow-500'
+                                  : 'text-gray-500'
+                              }`}>
+                                {item.ff}%
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs opacity-75">Strike</div>
+                              <div className="text-sm font-bold">${item.strike}</div>
                             </div>
                           </div>
-                        )}
-                      </div>
+                          
+                          <div className="text-xs mt-2 opacity-75 flex gap-2">
+                            <span>IV: {item.iv1}% → {item.iv2}%</span>
+                            <span>DTE: {item.dte1} → {item.dte2}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        // Stock Watchlist Item
+                        <button
+                          onClick={() => {
+                            setTicker(item.symbol);
+                            fetchOptionData(item.symbol);
+                          }}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <img
+                              src={`https://img.logokit.com/ticker/${item.symbol}?token=pk_fr93b6bfb5c425f6e3db62&format=png`}
+                              alt={item.symbol}
+                              className="w-6 h-6 rounded object-contain"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                            <span className="font-bold">{item.symbol}</span>
+                            {item.hasEarnings && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-500 text-black" title="Has upcoming earnings">
+                                📊
+                              </span>
+                            )}
+                          </div>
+                          
+                          {item.price && (
+                            <div className="text-sm mb-1">
+                              ${parseFloat(item.price).toFixed(2)}
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs opacity-75">Best FF</div>
+                              <div className={`text-lg font-bold ${
+                                parseFloat(item.bestFF) >= 30
+                                  ? 'text-green-500'
+                                  : parseFloat(item.bestFF) >= 16
+                                  ? 'text-yellow-500'
+                                  : 'text-gray-500'
+                              }`}>
+                                {item.bestFF}%
+                              </div>
+                            </div>
+                            
+                            {item.hasEarnings && item.earningsDate && (
+                              <div className="text-right">
+                                <div className="text-xs opacity-75">Earnings</div>
+                                <div className="text-xs font-semibold">
+                                  {new Date(item.earningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      )}
                       
                       <div className="text-[10px] opacity-50 mt-2">
                         {new Date(item.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -2194,7 +2423,51 @@ export default function ForwardVolCalculator() {
           </div>
         </div>
       </div>
-      <Analytics /> 
+
+      {/* Changelog */}
+      <div className="mt-12 max-w-[1800px] mx-auto px-6">
+        <div className={`${cardClass} rounded-lg shadow-lg p-6`}>
+          <h2 className="text-2xl font-bold mb-4">📝 Changelog</h2>
+          <div className="space-y-4">
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h3 className="font-semibold text-blue-600">Latest Updates</h3>
+              <ul className="text-sm mt-2 space-y-1">
+                <li>• <strong>Enhanced Watchlist:</strong> Now supports both stocks and calendar spreads</li>
+                <li>• <strong>User Profiles:</strong> Separate watchlists for Nils and Mr. FF</li>
+                <li>• <strong>Market Scanner:</strong> On-demand scan for best FF opportunities (≥$500M market cap)</li>
+                <li>• <strong>Total Options Volume:</strong> Now shows complete options volume (puts + calls, all strikes)</li>
+                <li>• <strong>Post-Earnings Filter:</strong> Hide spreads with front expiration after earnings</li>
+                <li>• <strong>Wider Layout:</strong> Optimized for larger screens (1800px max-width)</li>
+              </ul>
+            </div>
+            
+            <div className="border-l-4 border-green-500 pl-4">
+              <h3 className="font-semibold text-green-600">Previous Features</h3>
+              <ul className="text-sm mt-2 space-y-1">
+                <li>• <strong>Forward Volatility Calculator:</strong> Black-Scholes based FF calculations</li>
+                <li>• <strong>Earnings Integration:</strong> Finnhub API for upcoming earnings dates</li>
+                <li>• <strong>Calendar Spread Scanner:</strong> Automated spread recommendations</li>
+                <li>• <strong>Real-time Data:</strong> Polygon.io integration for live options data</li>
+                <li>• <strong>Dark Mode:</strong> Toggle between light and dark themes</li>
+                <li>• <strong>Recent Tickers:</strong> Quick access to recently viewed stocks</li>
+              </ul>
+            </div>
+            
+            <div className="border-l-4 border-purple-500 pl-4">
+              <h3 className="font-semibold text-purple-600">Technical Details</h3>
+              <ul className="text-sm mt-2 space-y-1">
+                <li>• <strong>Built with:</strong> React, Tailwind CSS, Vercel Serverless Functions</li>
+                <li>• <strong>Data Sources:</strong> Polygon.io (options), Finnhub (earnings), Yahoo Finance (prices)</li>
+                <li>• <strong>Storage:</strong> LocalStorage for user preferences and watchlists</li>
+                <li>• <strong>Performance:</strong> 4-hour caching for market scans, non-blocking UI</li>
+                <li>• <strong>Forward Volatility:</strong> Based on SSRN research paper methodology</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Analytics />
     </div>
   );
 }

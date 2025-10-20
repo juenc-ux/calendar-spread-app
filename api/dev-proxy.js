@@ -12,6 +12,7 @@ const PORT = 3001;
 app.use(cors());
 
 const FINNHUB_API_KEY = 'd3r3mvpr01qopgh6r57gd3r3mvpr01qopgh6r580';
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY || 'your_polygon_api_key_here';
 
 // Simple in-memory cache (60s TTL)
 const cache = new Map();
@@ -116,8 +117,62 @@ app.get('/api/earnings', async (req, res) => {
   }
 });
 
+// Market Scanner endpoint (simplified for local dev)
+app.get('/api/market-scan', async (req, res) => {
+  console.log('🔍 Market scan requested...');
+  
+  try {
+    // For local dev, return a simple mock response
+    const mockResults = [
+      {
+        symbol: 'TSLA',
+        name: 'Tesla Inc.',
+        price: 180.50,
+        marketCap: 580000000000,
+        bestFF: '25.3',
+        spread: { exp1: '2025-10-24', exp2: '2025-10-31' },
+        hasEarnings: true,
+        earningsDate: '2025-10-22'
+      },
+      {
+        symbol: 'AAPL',
+        name: 'Apple Inc.',
+        price: 195.20,
+        marketCap: 3000000000000,
+        bestFF: '18.7',
+        spread: { exp1: '2025-10-24', exp2: '2025-10-31' },
+        hasEarnings: false,
+        earningsDate: null
+      },
+      {
+        symbol: 'NVDA',
+        name: 'NVIDIA Corporation',
+        price: 450.80,
+        marketCap: 1100000000000,
+        bestFF: '22.1',
+        spread: { exp1: '2025-10-24', exp2: '2025-10-31' },
+        hasEarnings: true,
+        earningsDate: '2025-11-20'
+      }
+    ];
+
+    res.json({
+      success: true,
+      cached: false,
+      lastScan: new Date().toISOString(),
+      scanned: 3,
+      results: mockResults
+    });
+  } catch (error) {
+    console.error('Market scan error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Dev proxy running on http://localhost:${PORT}`);
-  console.log(`   API endpoint: http://localhost:${PORT}/api/earnings?symbol=TSLA`);
+  console.log(`   API endpoints:`);
+  console.log(`   - GET /api/earnings?symbol=TSLA`);
+  console.log(`   - GET /api/market-scan`);
 });
 
