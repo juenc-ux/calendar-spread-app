@@ -965,7 +965,17 @@ export default function ForwardVolCalculator() {
         console.log(`Filtered to ${filteredSpreads.length} spreads (removed post-earnings)`);
       }
 
-      // Apply liquidity filters
+      // Always filter out options with zero open interest
+      filteredSpreads = filteredSpreads.filter(s => {
+        const callHasOI = (s.callOpenInterest1 > 0 && s.callOpenInterest2 > 0);
+        const putHasOI = (s.putOpenInterest1 > 0 && s.putOpenInterest2 > 0);
+        
+        // At least one option type (call or put) must have open interest
+        return callHasOI || putHasOI;
+      });
+      console.log(`Filtered to ${filteredSpreads.length} spreads (removed zero OI options)`);
+
+      // Apply additional liquidity filters
       if (minOpenInterest > 0 || minVolume > 0) {
         filteredSpreads = filteredSpreads.filter(s => {
           const callOIMeets = (s.callOpenInterest1 >= minOpenInterest && s.callOpenInterest2 >= minOpenInterest);
@@ -976,7 +986,7 @@ export default function ForwardVolCalculator() {
           // At least one option type (call or put) must meet the criteria
           return (callOIMeets && callVolMeets) || (putOIMeets && putVolMeets);
         });
-        console.log(`Filtered to ${filteredSpreads.length} spreads (applied liquidity filters)`);
+        console.log(`Filtered to ${filteredSpreads.length} spreads (applied additional liquidity filters)`);
       }
 
       // Sort by FF descending and take top 10
@@ -2097,22 +2107,6 @@ export default function ForwardVolCalculator() {
                     >
                       Apply Filters
                     </button>
-                    <button
-                      onClick={() => {
-                        if (recommendedSpreads.length > 0) {
-                          const bestSpread = recommendedSpreads[0];
-                          setDate1(bestSpread.date1);
-                          setDate2(bestSpread.date2);
-                          setIv1(bestSpread.iv1);
-                          setIv2(bestSpread.iv2);
-                          setStrikePrice(bestSpread.strike.toString());
-                          calculateResults();
-                        }
-                      }}
-                      className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
-                    >
-                      🎯 Best Play
-                    </button>
                   </div>
 
                   {scanningForSpreads ? (
@@ -2158,17 +2152,23 @@ export default function ForwardVolCalculator() {
                               <div className="text-2xl font-bold">
                                 FF: {spread.ff === '∞' ? '∞' : `${spread.ff.toFixed(2)}%`}
                               </div>
-                              <div className="text-xs opacity-75">
-                                Call Spread: ${spread.callSpread}
+                              <div className="text-sm font-semibold mb-2">
+                                <div className="flex justify-between">
+                                  <span>Call: ${spread.callSpread}</span>
+                                  <span>Put: ${spread.putSpread}</span>
+                                </div>
                               </div>
-                              <div className="text-xs opacity-75">
-                                Put Spread: ${spread.putSpread}
+                              <div className="text-sm font-bold mb-1">
+                                <div className="flex justify-between">
+                                  <span className="text-blue-600">Call OI: {spread.callOpenInterest1} → {spread.callOpenInterest2}</span>
+                                  <span className="text-red-600">Put OI: {spread.putOpenInterest1} → {spread.putOpenInterest2}</span>
+                                </div>
                               </div>
-                              <div className="text-xs opacity-50 mt-1">
-                                <div>Call OI: {spread.callOpenInterest1} → {spread.callOpenInterest2}</div>
-                                <div>Put OI: {spread.putOpenInterest1} → {spread.putOpenInterest2}</div>
-                                <div>Call Vol: {spread.callVolume1} → {spread.callVolume2}</div>
-                                <div>Put Vol: {spread.putVolume1} → {spread.putVolume2}</div>
+                              <div className="text-sm font-bold">
+                                <div className="flex justify-between">
+                                  <span className="text-blue-500">Call Vol: {spread.callVolume1} → {spread.callVolume2}</span>
+                                  <span className="text-red-500">Put Vol: {spread.putVolume1} → {spread.putVolume2}</span>
+                                </div>
                               </div>
                               <button
                                 onClick={(e) => {
