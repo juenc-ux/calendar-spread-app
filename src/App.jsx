@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Download, Moon, Sun } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download, Moon, Sun } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 
 export default function ForwardVolCalculator() {
@@ -11,8 +11,6 @@ export default function ForwardVolCalculator() {
   const [strikePrice, setStrikePrice] = useState('100');
   const [riskFreeRate, setRiskFreeRate] = useState('4');
   const [dividend, setDividend] = useState('0');
-  const [showCalendar1, setShowCalendar1] = useState(false);
-  const [showCalendar2, setShowCalendar2] = useState(false);
   const [result, setResult] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [tradeHistory, setTradeHistory] = useState([]);
@@ -25,7 +23,6 @@ export default function ForwardVolCalculator() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [apiKey, setApiKey] = useState(localStorage.getItem('polygonKey') || '');
-  const [fmpApiKey, setFmpApiKey] = useState(localStorage.getItem('fmpKey') || 'FjOgXW2EKCdlZWfAQTwkxja7WGS8RERD');
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
   const [filteredTickers, setFilteredTickers] = useState([]);
   const [volumeCallT1, setVolumeCallT1] = useState(null);
@@ -547,7 +544,7 @@ export default function ForwardVolCalculator() {
   };
 
   // Fetch next earnings date using our serverless API (bypasses CORS)
-  const fetchEarningsDate = async (symbol, apiKey) => {
+  const fetchEarningsDate = async (symbol) => {
     try {
       console.log('📊 Fetching earnings date for:', symbol);
       
@@ -1115,19 +1112,6 @@ export default function ForwardVolCalculator() {
     }
   };
 
-  const getNextFridays = () => {
-    const today = new Date();
-    let fridays = [];
-    let currentDate = new Date(today);
-
-    while (fridays.length < 50) {
-      if (currentDate.getDay() === 5) {
-        fridays.push(new Date(currentDate));
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return fridays;
-  };
 
   const normDist = (x) => {
     const a1 = 0.254829592;
@@ -1457,56 +1441,6 @@ export default function ForwardVolCalculator() {
     }
   };
 
-  const renderCalendar = (value, onChange, show, setShow) => {
-    if (!show) return null;
-
-    const today = new Date();
-    let fridays = [];
-    let currentDate = new Date(today);
-    
-    while (fridays.length < 50) {
-      if (currentDate.getDay() === 5) {
-        fridays.push(new Date(currentDate));
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return (
-      <div className={`absolute ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-blue-300'} border-2 rounded-lg p-4 z-50 shadow-lg max-h-96 overflow-y-auto w-64`}>
-        <div className="flex justify-between items-center mb-4 sticky top-0 bg-inherit">
-          <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Next 50 Fridays</h3>
-          <button onClick={() => setShow(false)} className={`hover:opacity-70 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>✕</button>
-        </div>
-
-        <div className="space-y-1">
-          {fridays.map(friday => {
-            const dateStr = friday.toISOString().split('T')[0];
-            const isSelected = dateStr === value;
-            const daysAway = Math.floor((friday - today) / (1000 * 60 * 60 * 24));
-            
-            return (
-              <button
-                key={dateStr}
-                onClick={() => {
-                  onChange(dateStr);
-                  setShow(false);
-                }}
-                className={`w-full text-left px-3 py-2 rounded text-sm font-semibold transition-all ${
-                  isSelected 
-                    ? 'bg-blue-600 text-white' 
-                    : darkMode
-                    ? 'bg-gray-700 text-yellow-300 hover:bg-gray-600'
-                    : 'bg-yellow-100 text-gray-900 hover:bg-yellow-200'
-                }`}
-              >
-                {friday.toLocaleDateString('de-DE')} ({daysAway}d)
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   const getFFColor = (ff) => {
     const ffNum = parseFloat(ff);
@@ -1515,11 +1449,6 @@ export default function ForwardVolCalculator() {
     return darkMode ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-300 text-gray-900';
   };
 
-  const chartData = [
-    { dte: 0, iv: (parseFloat(iv1)).toFixed(2) },
-    { dte: (parseFloat(result?.daysToExp1) || 7) / 2, iv: (parseFloat(iv1) * 0.7 + parseFloat(iv2) * 0.3).toFixed(2) },
-    { dte: parseFloat(result?.daysToExp2) || 14, iv: (parseFloat(iv2)).toFixed(2) }
-  ];
 
   const exportCSV = () => {
     if (!result || result.error) return;
