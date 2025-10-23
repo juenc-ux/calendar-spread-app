@@ -7,14 +7,22 @@
 @tailwind utilities;
 
 :root {
-  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  --accent-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  --dark-gradient: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
-  --glass-bg: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.2);
-  --shadow-glow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  --shadow-glow-lg: 0 20px 60px rgba(0, 0, 0, 0.15);
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --border-color: #333333;
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --text-muted: #888888;
+  --accent-green: #00d4aa;
+  --accent-red: #ff6b6b;
+  --accent-blue: #4dabf7;
+  --accent-yellow: #ffd43b;
+  --accent-purple: #9775fa;
+  --success: #51cf66;
+  --warning: #ffd43b;
+  --error: #ff6b6b;
+  --info: #4dabf7;
 }
 
 * {
@@ -25,24 +33,277 @@
 
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;
 }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--dark-gradient);
-  color: white;
-  overflow-x: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
-  position: relative;
+  line-height: 1.5;
 }
 
-/* Monospace font for code-like elements */
+/* Monospace font for trading data */
 .code-font {
   font-family: 'Fira Code', 'JetBrains Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
   font-variant-ligatures: common-ligatures;
   font-feature-settings: "liga" 1, "calt" 1;
+  font-size: 0.9em;
 }
+
+/* Trading-specific styles */
+.trading-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.trading-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.trading-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 4px 12px rgba(77, 171, 247, 0.1);
+}
+
+.trading-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem;
+  color: var(--text-primary);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.trading-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(77, 171, 247, 0.2);
+}
+
+.trading-button {
+  background: var(--accent-blue);
+  border: none;
+  border-radius: 6px;
+  padding: 0.75rem 1.5rem;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.trading-button:hover {
+  background: #339af0;
+  transform: translateY(-1px);
+}
+
+.trading-button:active {
+  transform: translateY(0);
+}
+
+.trading-button.secondary {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.trading-button.secondary:hover {
+  background: var(--border-color);
+}
+
+.trading-button.success {
+  background: var(--success);
+}
+
+.trading-button.danger {
+  background: var(--error);
+}
+
+.trading-button.warning {
+  background: var(--warning);
+  color: var(--bg-primary);
+}
+
+/* Data display styles */
+.data-value {
+  font-family: 'Fira Code', monospace;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.data-value.positive {
+  color: var(--accent-green);
+}
+
+.data-value.negative {
+  color: var(--accent-red);
+}
+
+.data-value.neutral {
+  color: var(--text-primary);
+}
+
+.data-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+/* Status indicators */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.status-indicator.success {
+  background: rgba(81, 207, 102, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(81, 207, 102, 0.2);
+}
+
+.status-indicator.warning {
+  background: rgba(255, 212, 59, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(255, 212, 59, 0.2);
+}
+
+.status-indicator.error {
+  background: rgba(255, 107, 107, 0.1);
+  color: var(--error);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.status-indicator.info {
+  background: rgba(77, 171, 247, 0.1);
+  color: var(--info);
+  border: 1px solid rgba(77, 171, 247, 0.2);
+}
+
+/* Table styles */
+.trading-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.trading-table th,
+.trading-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.trading-table th {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.trading-table tr:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .trading-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .trading-card {
+    padding: 0.75rem;
+  }
+  
+  .trading-input {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+  
+  .trading-button {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Utility classes */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-left { text-align: left; }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 0.5rem; }
+.gap-4 { gap: 1rem; }
+.gap-6 { gap: 1.5rem; }
+
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+
+.p-2 { padding: 0.5rem; }
+.p-4 { padding: 1rem; }
+.p-6 { padding: 1.5rem; }
+
+.m-2 { margin: 0.5rem; }
+.m-4 { margin: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+
+.rounded { border-radius: 6px; }
+.rounded-lg { border-radius: 8px; }
+
+.border { border: 1px solid var(--border-color); }
+.border-t { border-top: 1px solid var(--border-color); }
+.border-b { border-bottom: 1px solid var(--border-color); }
+
+.hidden { display: none; }
+.block { display: block; }
+.inline-block { display: inline-block; }
+
+.cursor-pointer { cursor: pointer; }
+.select-none { user-select: none; }
+
+.transition { transition: all 0.2s ease; }
 
 /* Animated background particles */
 body::before {

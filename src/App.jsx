@@ -1,182 +1,87 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Download, Moon, Sun, Sparkles, Zap, TrendingUp, BarChart3, Calculator, Settings, RefreshCw, ArrowRight, Star, Target, DollarSign, Search, X, Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Clock, Users, Bookmark, History, Filter, Download as DownloadIcon } from 'lucide-react';
+import { 
+  Calculator, 
+  TrendingUp, 
+  TrendingDown, 
+  BarChart3, 
+  Settings, 
+  RefreshCw, 
+  Download, 
+  Bookmark, 
+  History, 
+  AlertCircle, 
+  CheckCircle, 
+  Clock, 
+  DollarSign,
+  Percent,
+  Calendar,
+  Target,
+  Zap,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Filter,
+  X,
+  Plus,
+  Trash2,
+  Copy,
+  ExternalLink
+} from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 
 export default function ForwardVolCalculator() {
-  // All original state variables
+  // Core calculation state
+  const [ticker, setTicker] = useState('');
+  const [spotPrice, setSpotPrice] = useState('');
+  const [strikePrice, setStrikePrice] = useState('');
   const [date1, setDate1] = useState('2025-10-24');
   const [date2, setDate2] = useState('2025-10-31');
   const [iv1, setIv1] = useState('50');
   const [iv2, setIv2] = useState('40');
-  const [spotPrice, setSpotPrice] = useState('100');
-  const [strikePrice, setStrikePrice] = useState('100');
   const [riskFreeRate, setRiskFreeRate] = useState('4');
   const [dividend, setDividend] = useState('0');
-  const [showCalendar1, setShowCalendar1] = useState(false);
-  const [showCalendar2, setShowCalendar2] = useState(false);
+  
+  // Results state
   const [result, setResult] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
-  const [tradeHistory, setTradeHistory] = useState([]);
-  const [callPriceSlider, setCallPriceSlider] = useState(null);
-  const [putPriceSlider, setPutPriceSlider] = useState(null);
-  const [adjustedFFCall, setAdjustedFFCall] = useState(null);
-  const [adjustedFFPut, setAdjustedFFPut] = useState(null);
-  const [pricingModel, setPricingModel] = useState('blackscholes');
-  const [ticker, setTicker] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(null);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('polygonKey') || '');
-  const [fmpApiKey, setFmpApiKey] = useState(localStorage.getItem('fmpKey') || 'FjOgXW2EKCdlZWfAQTwkxja7WGS8RERD');
-  const [showTickerDropdown, setShowTickerDropdown] = useState(false);
-  const [filteredTickers, setFilteredTickers] = useState([]);
-  const [volumeCallT1, setVolumeCallT1] = useState(null);
-  const [volumeCallT2, setVolumeCallT2] = useState(null);
-  const [oiCallT1, setOiCallT1] = useState(null);
-  const [oiCallT2, setOiCallT2] = useState(null);
-  const [availableExpirations, setAvailableExpirations] = useState(() => {
-    const today = new Date();
-    const fridays = [];
-    let currentDate = new Date(today);
-    while (fridays.length < 50) {
-      currentDate.setDate(currentDate.getDate() + 1);
-      if (currentDate.getDay() === 5) {
-        fridays.push(currentDate.toISOString().split('T')[0]);
-      }
-    }
-    return fridays;
-  });
-  const [marketCap, setMarketCap] = useState(null);
-  const [avgOptionsVolume, setAvgOptionsVolume] = useState(null);
-  const [recommendedSpreads, setRecommendedSpreads] = useState([]);
-  const [scanningForSpreads, setScanningForSpreads] = useState(false);
-  const [nextEarningsDate, setNextEarningsDate] = useState(null);
-  const [earningsTime, setEarningsTime] = useState(null);
-  const [earningsConflict, setEarningsConflict] = useState(null);
-  const [currentUser, setCurrentUser] = useState(() => {
-    return localStorage.getItem('currentUser') || 'Nils';
-  });
-  const [hidePostEarningsSpreads, setHidePostEarningsSpreads] = useState(false);
-  const [marketScanResults, setMarketScanResults] = useState([]);
-  const [loadingMarketScan, setLoadingMarketScan] = useState(false);
-  const [lastMarketScan, setLastMarketScan] = useState(null);
-  const [minOpenInterest, setMinOpenInterest] = useState(100);
-  const [minVolume, setMinVolume] = useState(0);
-  const [maxDTEGap, setMaxDTEGap] = useState(200);
-  const [recentTickers, setRecentTickers] = useState(() => {
-    const saved = localStorage.getItem(`recentTickers_${currentUser}`);
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [watchlist, setWatchlist] = useState(() => {
-    const saved = localStorage.getItem(`watchlist_${currentUser}`);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [error, setError] = useState(null);
   
   // UI state
   const [activeTab, setActiveTab] = useState('calculator');
   const [showSettings, setShowSettings] = useState(false);
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
   
-  // Animation refs
-  const heroRef = useRef(null);
-  const cardsRef = useRef([]);
-  const [isVisible, setIsVisible] = useState({});
+  // Trading data state
+  const [currentPrice, setCurrentPrice] = useState(null);
+  const [marketData, setMarketData] = useState(null);
+  const [volatilityData, setVolatilityData] = useState(null);
+  const [earningsData, setEarningsData] = useState(null);
+  
+  // Watchlist and history
+  const [watchlist, setWatchlist] = useState([]);
+  const [calculationHistory, setCalculationHistory] = useState([]);
+  const [recentTickers, setRecentTickers] = useState([]);
+  
+  // Advanced features
+  const [pricingModel, setPricingModel] = useState('blackscholes');
+  const [greeks, setGreeks] = useState(null);
+  const [riskMetrics, setRiskMetrics] = useState(null);
+  const [scenarioAnalysis, setScenarioAnalysis] = useState(null);
 
-  // Popular US stocks for autocomplete
-  const popularStocks = [
-    { symbol: 'AAPL', name: 'Apple Inc.' },
-    { symbol: 'MSFT', name: 'Microsoft Corporation' },
-    { symbol: 'GOOGL', name: 'Alphabet Inc.' },
-    { symbol: 'AMZN', name: 'Amazon.com Inc.' },
-    { symbol: 'NVDA', name: 'NVIDIA Corporation' },
-    { symbol: 'META', name: 'Meta Platforms Inc.' },
-    { symbol: 'TSLA', name: 'Tesla Inc.' },
-    { symbol: 'BRK.B', name: 'Berkshire Hathaway Inc.' },
-    { symbol: 'V', name: 'Visa Inc.' },
-    { symbol: 'JPM', name: 'JPMorgan Chase & Co.' },
-    { symbol: 'WMT', name: 'Walmart Inc.' },
-    { symbol: 'JNJ', name: 'Johnson & Johnson' },
-    { symbol: 'MA', name: 'Mastercard Inc.' },
-    { symbol: 'PG', name: 'Procter & Gamble Co.' },
-    { symbol: 'UNH', name: 'UnitedHealth Group Inc.' },
-    { symbol: 'HD', name: 'Home Depot Inc.' },
-    { symbol: 'DIS', name: 'Walt Disney Co.' },
-    { symbol: 'BAC', name: 'Bank of America Corp.' },
-    { symbol: 'ADBE', name: 'Adobe Inc.' },
-    { symbol: 'CRM', name: 'Salesforce Inc.' },
-    { symbol: 'NFLX', name: 'Netflix Inc.' },
-    { symbol: 'CMCSA', name: 'Comcast Corporation' },
-    { symbol: 'XOM', name: 'Exxon Mobil Corporation' },
-    { symbol: 'COST', name: 'Costco Wholesale Corp.' },
-    { symbol: 'PEP', name: 'PepsiCo Inc.' },
-    { symbol: 'TMO', name: 'Thermo Fisher Scientific Inc.' },
-    { symbol: 'ABT', name: 'Abbott Laboratories' },
-    { symbol: 'NKE', name: 'Nike Inc.' },
-    { symbol: 'CSCO', name: 'Cisco Systems Inc.' },
-    { symbol: 'ORCL', name: 'Oracle Corporation' },
-    { symbol: 'AMD', name: 'Advanced Micro Devices Inc.' },
-    { symbol: 'INTC', name: 'Intel Corporation' },
-    { symbol: 'QCOM', name: 'Qualcomm Inc.' },
-    { symbol: 'TXN', name: 'Texas Instruments Inc.' },
-    { symbol: 'AVGO', name: 'Broadcom Inc.' },
-    { symbol: 'CVX', name: 'Chevron Corporation' },
-    { symbol: 'KO', name: 'Coca-Cola Co.' },
-    { symbol: 'MCD', name: 'McDonald\'s Corporation' },
-    { symbol: 'PYPL', name: 'PayPal Holdings Inc.' },
-    { symbol: 'UBER', name: 'Uber Technologies Inc.' },
-    { symbol: 'BA', name: 'Boeing Co.' },
-    { symbol: 'CAT', name: 'Caterpillar Inc.' },
-    { symbol: 'GE', name: 'General Electric Co.' },
-    { symbol: 'F', name: 'Ford Motor Co.' },
-    { symbol: 'GM', name: 'General Motors Co.' },
-    { symbol: 'SBUX', name: 'Starbucks Corporation' },
-    { symbol: 'PLTR', name: 'Palantir Technologies Inc.' },
-    { symbol: 'COIN', name: 'Coinbase Global Inc.' },
-    { symbol: 'SQ', name: 'Block Inc.' },
-    { symbol: 'SNOW', name: 'Snowflake Inc.' },
-    { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust' },
-    { symbol: 'QQQ', name: 'Invesco QQQ Trust' },
-    { symbol: 'IWM', name: 'iShares Russell 2000 ETF' },
-    { symbol: 'DIA', name: 'SPDR Dow Jones Industrial Average ETF' },
-    { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF' },
-    { symbol: 'VOO', name: 'Vanguard S&P 500 ETF' },
-    { symbol: 'GLD', name: 'SPDR Gold Trust' },
-    { symbol: 'SLV', name: 'iShares Silver Trust' },
-    { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF' },
-    { symbol: 'XLE', name: 'Energy Select Sector SPDR Fund' },
-    { symbol: 'XLF', name: 'Financial Select Sector SPDR Fund' },
-    { symbol: 'XLK', name: 'Technology Select Sector SPDR Fund' },
+  // Popular tickers for quick access
+  const popularTickers = [
+    'SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+    'AMD', 'NFLX', 'PLTR', 'COIN', 'SQ', 'SNOW', 'CRM', 'ADBE', 'ORCL', 'INTC'
   ];
-
-  // Intersection Observer for animations
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsVisible(prev => ({ ...prev, [entry.target.id]: true }));
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
-    );
-
-    const elements = document.querySelectorAll('.fade-in, .slide-in-left, .slide-in-right, .scale-in');
-    elements.forEach(el => observer.observe(el));
-
-    return () => observer.disconnect();
-  }, []);
-
-  // Reload user-specific data when user changes
-  useEffect(() => {
-    const savedWatchlist = localStorage.getItem(`watchlist_${currentUser}`);
-    const savedRecent = localStorage.getItem(`recentTickers_${currentUser}`);
-    setWatchlist(savedWatchlist ? JSON.parse(savedWatchlist) : []);
-    setRecentTickers(savedRecent ? JSON.parse(savedRecent) : []);
-  }, [currentUser]);
 
   // Black-Scholes calculation
   const calculateBlackScholes = (S, K, T, r, sigma, optionType) => {
+    if (T <= 0) return 0;
+    
     const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
     const d2 = d1 - sigma * Math.sqrt(T);
     
@@ -185,12 +90,12 @@ export default function ForwardVolCalculator() {
     };
     
     const erf = (x) => {
-      const a1 =  0.254829592;
+      const a1 = 0.254829592;
       const a2 = -0.284496736;
-      const a3 =  1.421413741;
+      const a3 = 1.421413741;
       const a4 = -1.453152027;
-      const a5 =  1.061405429;
-      const p  =  0.3275911;
+      const a5 = 1.061405429;
+      const p = 0.3275911;
       
       const sign = x >= 0 ? 1 : -1;
       x = Math.abs(x);
@@ -208,78 +113,153 @@ export default function ForwardVolCalculator() {
     }
   };
 
-  // Calculate forward volatility
-  const calculateForwardVol = () => {
-    const S = parseFloat(spotPrice);
-    const K = parseFloat(strikePrice);
-    const r = parseFloat(riskFreeRate) / 100;
-    const q = parseFloat(dividend) / 100;
+  // Calculate Greeks
+  const calculateGreeks = (S, K, T, r, sigma, optionType) => {
+    if (T <= 0) return null;
     
-    const date1Obj = new Date(date1);
-    const date2Obj = new Date(date2);
-    const today = new Date();
+    const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
+    const d2 = d1 - sigma * Math.sqrt(T);
     
-    const T1 = Math.max(0, (date1Obj - today) / (365 * 24 * 60 * 60 * 1000));
-    const T2 = Math.max(0, (date2Obj - today) / (365 * 24 * 60 * 60 * 1000));
+    const normalPDF = (x) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+    const normalCDF = (x) => 0.5 * (1 + erf(x / Math.sqrt(2)));
     
-    if (T1 >= T2) {
-      setResult({ error: 'Second expiration must be after first expiration' });
-      return;
-    }
+    const erf = (x) => {
+      const a1 = 0.254829592;
+      const a2 = -0.284496736;
+      const a3 = 1.421413741;
+      const a4 = -1.453152027;
+      const a5 = 1.061405429;
+      const p = 0.3275911;
+      
+      const sign = x >= 0 ? 1 : -1;
+      x = Math.abs(x);
+      
+      const t = 1.0 / (1.0 + p * x);
+      const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+      
+      return sign * y;
+    };
     
-    const sigma1 = parseFloat(iv1) / 100;
-    const sigma2 = parseFloat(iv2) / 100;
+    const pdf = normalPDF(d1);
+    const cdf = normalCDF(d1);
+    const cdfNeg = normalCDF(-d1);
     
-    // Forward volatility formula
-    const forwardVol = Math.sqrt((sigma2 * sigma2 * T2 - sigma1 * sigma1 * T1) / (T2 - T1));
+    let delta, gamma, theta, vega, rho;
     
-    // Calculate option prices
-    const callPrice1 = calculateBlackScholes(S, K, T1, r, sigma1, 'call');
-    const putPrice1 = calculateBlackScholes(S, K, T1, r, sigma1, 'put');
-    const callPrice2 = calculateBlackScholes(S, K, T2, r, sigma2, 'call');
-    const putPrice2 = calculateBlackScholes(S, K, T2, r, sigma2, 'put');
-    
-    // Calendar spread values
-    const callSpread = callPrice1 - callPrice2;
-    const putSpread = putPrice2 - putPrice1;
-    
-    setResult({
-      forwardVol: (forwardVol * 100).toFixed(2),
-      callPrice1: callPrice1.toFixed(2),
-      putPrice1: putPrice1.toFixed(2),
-      callPrice2: callPrice2.toFixed(2),
-      putPrice2: putPrice2.toFixed(2),
-      callSpread: callSpread.toFixed(2),
-      putSpread: putSpread.toFixed(2),
-      T1: T1.toFixed(4),
-      T2: T2.toFixed(4)
-    });
-  };
-
-  // Ticker handling functions
-  const handleTickerChange = (value) => {
-    const upper = value.toUpperCase();
-    setTicker(upper);
-
-    if (upper.length > 0) {
-      const matches = popularStocks.filter(stock =>
-        stock.symbol.startsWith(upper) ||
-        stock.name.toUpperCase().includes(upper)
-      ).slice(0, 10);
-      setFilteredTickers(matches);
-      setShowTickerDropdown(matches.length > 0);
+    if (optionType === 'call') {
+      delta = cdf;
+      gamma = pdf / (S * sigma * Math.sqrt(T));
+      theta = -(S * pdf * sigma) / (2 * Math.sqrt(T)) - r * K * Math.exp(-r * T) * cdf;
+      vega = S * pdf * Math.sqrt(T);
+      rho = K * T * Math.exp(-r * T) * cdf;
     } else {
-      setFilteredTickers([]);
-      setShowTickerDropdown(false);
+      delta = cdf - 1;
+      gamma = pdf / (S * sigma * Math.sqrt(T));
+      theta = -(S * pdf * sigma) / (2 * Math.sqrt(T)) + r * K * Math.exp(-r * T) * cdfNeg;
+      vega = S * pdf * Math.sqrt(T);
+      rho = -K * T * Math.exp(-r * T) * cdfNeg;
+    }
+    
+    return { delta, gamma, theta, vega, rho };
+  };
+
+  // Main calculation function
+  const calculateForwardVol = () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const S = parseFloat(spotPrice);
+      const K = parseFloat(strikePrice);
+      const r = parseFloat(riskFreeRate) / 100;
+      const q = parseFloat(dividend) / 100;
+      
+      const date1Obj = new Date(date1);
+      const date2Obj = new Date(date2);
+      const today = new Date();
+      
+      const T1 = Math.max(0, (date1Obj - today) / (365 * 24 * 60 * 60 * 1000));
+      const T2 = Math.max(0, (date2Obj - today) / (365 * 24 * 60 * 60 * 1000));
+      
+      if (T1 >= T2) {
+        throw new Error('Second expiration must be after first expiration');
+      }
+      
+      if (T1 <= 0) {
+        throw new Error('First expiration must be in the future');
+      }
+      
+      const sigma1 = parseFloat(iv1) / 100;
+      const sigma2 = parseFloat(iv2) / 100;
+      
+      // Forward volatility calculation
+      const forwardVol = Math.sqrt((sigma2 * sigma2 * T2 - sigma1 * sigma1 * T1) / (T2 - T1));
+      
+      // Option prices
+      const callPrice1 = calculateBlackScholes(S, K, T1, r, sigma1, 'call');
+      const putPrice1 = calculateBlackScholes(S, K, T1, r, sigma1, 'put');
+      const callPrice2 = calculateBlackScholes(S, K, T2, r, sigma2, 'call');
+      const putPrice2 = calculateBlackScholes(S, K, T2, r, sigma2, 'put');
+      
+      // Calendar spreads
+      const callSpread = callPrice1 - callPrice2;
+      const putSpread = putPrice2 - putPrice1;
+      
+      // Greeks for both options
+      const greeks1 = calculateGreeks(S, K, T1, r, sigma1, 'call');
+      const greeks2 = calculateGreeks(S, K, T2, r, sigma2, 'call');
+      
+      // Risk metrics
+      const maxLoss = Math.max(callSpread, putSpread);
+      const breakevenPoints = {
+        call: S + callSpread,
+        put: S - putSpread
+      };
+      
+      const result = {
+        forwardVol: (forwardVol * 100).toFixed(2),
+        callPrice1: callPrice1.toFixed(2),
+        putPrice1: putPrice1.toFixed(2),
+        callPrice2: callPrice2.toFixed(2),
+        putPrice2: putPrice2.toFixed(2),
+        callSpread: callSpread.toFixed(2),
+        putSpread: putSpread.toFixed(2),
+        T1: T1.toFixed(4),
+        T2: T2.toFixed(4),
+        greeks1,
+        greeks2,
+        riskMetrics: {
+          maxLoss: maxLoss.toFixed(2),
+          breakevenPoints
+        }
+      };
+      
+      setResult(result);
+      
+      // Add to history
+      const historyEntry = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        ticker,
+        spotPrice,
+        strikePrice,
+        date1,
+        date2,
+        iv1,
+        iv2,
+        result
+      };
+      
+      setCalculationHistory(prev => [historyEntry, ...prev.slice(0, 49)]);
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const selectTicker = (symbol) => {
-    setTicker(symbol);
-    setShowTickerDropdown(false);
-    setFilteredTickers([]);
-  };
-
+  // Load demo data
   const loadDemoData = () => {
     setTicker('SPY');
     setSpotPrice('580.25');
@@ -290,446 +270,528 @@ export default function ForwardVolCalculator() {
     setIv2('11.8');
     setRiskFreeRate('4.5');
     setDividend('1.2');
-    setTimeout(() => calculateForwardVol(), 100);
   };
 
-  // Add ticker to recent tickers list
-  const addToRecentTickers = (symbol) => {
-    const upperSymbol = symbol.toUpperCase().trim();
-    const updated = [upperSymbol, ...recentTickers.filter(t => t !== upperSymbol)].slice(0, 6);
-    setRecentTickers(updated);
-    localStorage.setItem(`recentTickers_${currentUser}`, JSON.stringify(updated));
+  // Add to watchlist
+  const addToWatchlist = () => {
+    if (!ticker || !result) return;
+    
+    const watchlistEntry = {
+      id: Date.now(),
+      ticker,
+      spotPrice,
+      strikePrice,
+      date1,
+      date2,
+      forwardVol: result.forwardVol,
+      callSpread: result.callSpread,
+      putSpread: result.putSpread,
+      timestamp: new Date().toISOString()
+    };
+    
+    setWatchlist(prev => [watchlistEntry, ...prev.filter(item => item.ticker !== ticker)]);
   };
 
-  // Particle system
-  const ParticleSystem = () => {
-    const [particles, setParticles] = useState([]);
+  // Copy result to clipboard
+  const copyResult = () => {
+    if (!result) return;
+    
+    const resultText = `
+Forward Volatility Calculator Results
+====================================
+Ticker: ${ticker}
+Spot Price: $${spotPrice}
+Strike Price: $${strikePrice}
+Expiration 1: ${date1}
+Expiration 2: ${date2}
+IV 1: ${iv1}%
+IV 2: ${iv2}%
 
-    useEffect(() => {
-      const newParticles = Array.from({ length: 20 }, (_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        size: Math.random() * 4 + 2,
-        speed: Math.random() * 0.5 + 0.1,
-        opacity: Math.random() * 0.5 + 0.1
-      }));
-      setParticles(newParticles);
-    }, []);
-
-    return (
-      <div className="particles">
-        {particles.map(particle => (
-          <div
-            key={particle.id}
-            className="particle"
-            style={{
-              left: `${particle.x}%`,
-              animationDelay: `${particle.id * 0.5}s`,
-              width: `${particle.size}px`,
-              height: `${particle.size}px`,
-              opacity: particle.opacity
-            }}
-          />
-        ))}
-      </div>
-    );
+Results:
+--------
+Forward Volatility: ${result.forwardVol}%
+Call Price 1: $${result.callPrice1}
+Put Price 1: $${result.putPrice1}
+Call Price 2: $${result.callPrice2}
+Put Price 2: $${result.putPrice2}
+Call Spread: $${result.callSpread}
+Put Spread: $${result.putSpread}
+    `.trim();
+    
+    navigator.clipboard.writeText(resultText);
   };
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'dark-mode' : ''}`}>
+    <div className="min-h-screen bg-primary">
       <Analytics />
-      <ParticleSystem />
       
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass backdrop-blur-md border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      {/* Header */}
+      <header className="border-b border-color bg-secondary">
+        <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-                <Calculator className="w-6 h-6 text-white" />
+              <div className="p-2 bg-accent-blue rounded">
+                <Calculator className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold gradient-text">Forward Vol Calculator</h1>
-                <p className="text-sm text-white/60 code-font">Advanced Options Analysis</p>
+                <h1 className="text-lg font-bold text-primary">Forward Vol Calculator</h1>
+                <p className="text-xs text-muted code-font">Professional Options Analysis</p>
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setActiveTab('calculator')}
-                className={`px-4 py-2 rounded-lg transition-all ${
+                className={`px-3 py-1 rounded text-sm transition ${
                   activeTab === 'calculator' 
-                    ? 'bg-white/20 text-white' 
-                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                    ? 'bg-accent-blue text-white' 
+                    : 'text-secondary hover:text-primary hover:bg-tertiary'
                 }`}
               >
                 Calculator
               </button>
               <button
                 onClick={() => setActiveTab('watchlist')}
-                className={`px-4 py-2 rounded-lg transition-all ${
+                className={`px-3 py-1 rounded text-sm transition ${
                   activeTab === 'watchlist' 
-                    ? 'bg-white/20 text-white' 
-                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                    ? 'bg-accent-blue text-white' 
+                    : 'text-secondary hover:text-primary hover:bg-tertiary'
                 }`}
               >
                 Watchlist
               </button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`px-4 py-2 rounded-lg transition-all ${
+                className={`px-3 py-1 rounded text-sm transition ${
                   activeTab === 'history' 
-                    ? 'bg-white/20 text-white' 
-                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                    ? 'bg-accent-blue text-white' 
+                    : 'text-secondary hover:text-primary hover:bg-tertiary'
                 }`}
               >
                 History
               </button>
               
-              <button 
+              <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-lg hover:bg-white/10 transition-all"
+                className="p-2 rounded hover:bg-tertiary transition"
               >
-                {darkMode ? <Sun className="w-5 h-5 text-white" /> : <Moon className="w-5 h-5 text-white" />}
+                {darkMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </button>
             </div>
           </div>
         </div>
-      </nav>
+      </header>
 
       {/* Main Content */}
-      <main className="pt-20">
+      <main className="max-w-7xl mx-auto px-4 py-6">
         {activeTab === 'calculator' && (
-          <>
-            {/* Hero Section */}
-            <section ref={heroRef} className="relative min-h-screen flex items-center justify-center overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-pink-900/20"></div>
+          <div className="trading-grid">
+            {/* Input Panel */}
+            <div className="trading-card">
+              <div className="flex items-center gap-2 mb-4">
+                <Settings className="w-4 h-4 text-accent-blue" />
+                <h2 className="text-lg font-semibold">Parameters</h2>
+              </div>
               
-              <div className="relative z-10 text-center max-w-6xl mx-auto px-6">
-                <div className="fade-in">
-                  <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-6 py-3 mb-8 border border-white/20">
-                    <Sparkles className="w-5 h-5 text-yellow-400" />
-                    <span className="text-sm font-medium">Advanced Options Calculator</span>
+              <div className="space-y-4">
+                {/* Ticker */}
+                <div>
+                  <label className="data-label">Ticker Symbol</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={ticker}
+                      onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                      placeholder="e.g., SPY, AAPL"
+                      className="trading-input code-font"
+                    />
+                    <button
+                      onClick={loadDemoData}
+                      className="trading-button secondary px-3"
+                    >
+                      Demo
+                    </button>
+                  </div>
+                  
+                  {/* Quick ticker buttons */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {popularTickers.slice(0, 10).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setTicker(t)}
+                        className={`px-2 py-1 text-xs rounded transition ${
+                          ticker === t 
+                            ? 'bg-accent-blue text-white' 
+                            : 'bg-tertiary text-secondary hover:bg-border-color'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 
-                <h1 className="fade-in text-6xl md:text-8xl font-bold mb-6">
-                  <span className="gradient-text">Forward Volatility</span>
-                  <br />
-                  <span className="gradient-text-secondary">Calculator</span>
-                </h1>
+                {/* Price inputs */}
+                <div className="trading-grid">
+                  <div>
+                    <label className="data-label">Spot Price ($)</label>
+                    <input
+                      type="number"
+                      value={spotPrice}
+                      onChange={(e) => setSpotPrice(e.target.value)}
+                      className="trading-input code-font"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="data-label">Strike Price ($)</label>
+                    <input
+                      type="number"
+                      value={strikePrice}
+                      onChange={(e) => setStrikePrice(e.target.value)}
+                      className="trading-input code-font"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
                 
-                <p className="fade-in text-xl md:text-2xl text-white/80 mb-12 max-w-3xl mx-auto leading-relaxed">
-                  Calculate forward volatility and calendar spread strategies with precision. 
-                  Advanced Black-Scholes modeling meets beautiful design.
-                </p>
+                {/* Date inputs */}
+                <div className="trading-grid">
+                  <div>
+                    <label className="data-label">First Expiration</label>
+                    <input
+                      type="date"
+                      value={date1}
+                      onChange={(e) => setDate1(e.target.value)}
+                      className="trading-input code-font"
+                    />
+                  </div>
+                  <div>
+                    <label className="data-label">Second Expiration</label>
+                    <input
+                      type="date"
+                      value={date2}
+                      onChange={(e) => setDate2(e.target.value)}
+                      className="trading-input code-font"
+                    />
+                  </div>
+                </div>
                 
-                <div className="fade-in flex flex-col sm:flex-row gap-4 justify-center items-center">
-                  <button 
-                    onClick={calculateForwardVol}
-                    className="btn-primary group flex items-center gap-3 text-lg px-8 py-4"
-                  >
-                    <Calculator className="w-6 h-6" />
-                    Calculate Now
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  
-                  <button 
-                    onClick={loadDemoData}
-                    className="btn-secondary group flex items-center gap-3 text-lg px-8 py-4"
-                  >
-                    <RefreshCw className="w-6 h-6" />
-                    Load Demo Data
-                  </button>
+                {/* IV inputs */}
+                <div className="trading-grid">
+                  <div>
+                    <label className="data-label">IV 1 (%)</label>
+                    <input
+                      type="number"
+                      value={iv1}
+                      onChange={(e) => setIv1(e.target.value)}
+                      className="trading-input code-font"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="data-label">IV 2 (%)</label>
+                    <input
+                      type="number"
+                      value={iv2}
+                      onChange={(e) => setIv2(e.target.value)}
+                      className="trading-input code-font"
+                      step="0.1"
+                    />
+                  </div>
                 </div>
+                
+                {/* Rate inputs */}
+                <div className="trading-grid">
+                  <div>
+                    <label className="data-label">Risk-free Rate (%)</label>
+                    <input
+                      type="number"
+                      value={riskFreeRate}
+                      onChange={(e) => setRiskFreeRate(e.target.value)}
+                      className="trading-input code-font"
+                      step="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="data-label">Dividend Yield (%)</label>
+                    <input
+                      type="number"
+                      value={dividend}
+                      onChange={(e) => setDividend(e.target.value)}
+                      className="trading-input code-font"
+                      step="0.1"
+                    />
+                  </div>
+                </div>
+                
+                {/* Calculate button */}
+                <button
+                  onClick={calculateForwardVol}
+                  disabled={loading}
+                  className="trading-button w-full flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Calculating...
+                    </>
+                  ) : (
+                    <>
+                      <Calculator className="w-4 h-4" />
+                      Calculate Forward Vol
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {/* Results Panel */}
+            <div className="trading-card">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-accent-green" />
+                  <h2 className="text-lg font-semibold">Results</h2>
+                </div>
+                {result && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyResult}
+                      className="p-1 rounded hover:bg-tertiary transition"
+                      title="Copy results"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={addToWatchlist}
+                      className="p-1 rounded hover:bg-tertiary transition"
+                      title="Add to watchlist"
+                    >
+                      <Bookmark className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
               
-              {/* Floating elements */}
-              <div className="absolute top-20 left-10 animate-bounce-slow">
-                <div className="glass w-16 h-16 rounded-full flex items-center justify-center">
-                  <TrendingUp className="w-8 h-8 text-blue-400" />
+              {error && (
+                <div className="status-indicator error mb-4">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
                 </div>
-              </div>
+              )}
               
-              <div className="absolute bottom-20 right-10 animate-bounce-slow" style={{ animationDelay: '1s' }}>
-                <div className="glass w-20 h-20 rounded-full flex items-center justify-center">
-                  <BarChart3 className="w-10 h-10 text-purple-400" />
-                </div>
-              </div>
-              
-              <div className="absolute top-1/2 left-20 animate-bounce-slow" style={{ animationDelay: '2s' }}>
-                <div className="glass w-12 h-12 rounded-full flex items-center justify-center">
-                  <Target className="w-6 h-6 text-pink-400" />
-                </div>
-              </div>
-            </section>
-
-            {/* Calculator Section */}
-            <section className="relative py-20 px-6">
-              <div className="max-w-7xl mx-auto">
-                <div className="grid lg:grid-cols-2 gap-12 items-start">
-                  
-                  {/* Input Panel */}
-                  <div className="slide-in-left">
-                    <div className="glass-card">
-                      <div className="flex items-center gap-3 mb-8">
-                        <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-                          <Settings className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold gradient-text">Parameters</h2>
-                          <p className="text-white/60">Enter your trading parameters</p>
+              {result ? (
+                <div className="space-y-4">
+                  {/* Forward Volatility */}
+                  <div className="p-4 bg-tertiary rounded border border-accent-blue">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="data-label">Forward Volatility</div>
+                        <div className="text-2xl font-bold text-accent-blue code-font">
+                          {result.forwardVol}%
                         </div>
                       </div>
-                      
-                      <div className="space-y-6">
-                        {/* Ticker Input */}
-                        <div className="relative">
-                          <label className="block text-sm font-medium text-white/80 mb-2">Ticker Symbol</label>
-                          <input
-                            type="text"
-                            value={ticker}
-                            onChange={(e) => handleTickerChange(e.target.value)}
-                            placeholder="e.g., AAPL, MSFT, TSLA"
-                            className="input-field code-font"
-                          />
-                          {showTickerDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-2 glass rounded-xl border border-white/20 max-h-60 overflow-y-auto z-10">
-                              {filteredTickers.map((stock) => (
-                                <button
-                                  key={stock.symbol}
-                                  onClick={() => selectTicker(stock.symbol)}
-                                  className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors border-b border-white/10 last:border-b-0"
-                                >
-                                  <div className="font-semibold text-white">{stock.symbol}</div>
-                                  <div className="text-sm text-white/60">{stock.name}</div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Spot Price */}
-                        <div>
-                          <label className="block text-sm font-medium text-white/80 mb-2">Spot Price ($)</label>
-                          <input
-                            type="number"
-                            value={spotPrice}
-                            onChange={(e) => setSpotPrice(e.target.value)}
-                            className="input-field code-font"
-                            step="0.01"
-                          />
-                        </div>
-                        
-                        {/* Strike Price */}
-                        <div>
-                          <label className="block text-sm font-medium text-white/80 mb-2">Strike Price ($)</label>
-                          <input
-                            type="number"
-                            value={strikePrice}
-                            onChange={(e) => setStrikePrice(e.target.value)}
-                            className="input-field code-font"
-                            step="0.01"
-                          />
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Date 1 */}
-                          <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">First Expiration</label>
-                            <input
-                              type="date"
-                              value={date1}
-                              onChange={(e) => setDate1(e.target.value)}
-                              className="input-field code-font"
-                            />
-                          </div>
-                          
-                          {/* Date 2 */}
-                          <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">Second Expiration</label>
-                            <input
-                              type="date"
-                              value={date2}
-                              onChange={(e) => setDate2(e.target.value)}
-                              className="input-field code-font"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* IV 1 */}
-                          <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">IV 1 (%)</label>
-                            <input
-                              type="number"
-                              value={iv1}
-                              onChange={(e) => setIv1(e.target.value)}
-                              className="input-field code-font"
-                              step="0.1"
-                            />
-                          </div>
-                          
-                          {/* IV 2 */}
-                          <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">IV 2 (%)</label>
-                            <input
-                              type="number"
-                              value={iv2}
-                              onChange={(e) => setIv2(e.target.value)}
-                              className="input-field code-font"
-                              step="0.1"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Risk-free Rate */}
-                          <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">Risk-free Rate (%)</label>
-                            <input
-                              type="number"
-                              value={riskFreeRate}
-                              onChange={(e) => setRiskFreeRate(e.target.value)}
-                              className="input-field code-font"
-                              step="0.1"
-                            />
-                          </div>
-                          
-                          {/* Dividend */}
-                          <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">Dividend Yield (%)</label>
-                            <input
-                              type="number"
-                              value={dividend}
-                              onChange={(e) => setDividend(e.target.value)}
-                              className="input-field code-font"
-                              step="0.1"
-                            />
-                          </div>
-                        </div>
+                      <TrendingUp className="w-8 h-8 text-accent-blue" />
+                    </div>
+                  </div>
+                  
+                  {/* Option Prices */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-secondary mb-2">Option Prices</h3>
+                    <div className="trading-grid">
+                      <div className="p-3 bg-tertiary rounded">
+                        <div className="data-label">Call 1</div>
+                        <div className="data-value positive code-font">${result.callPrice1}</div>
+                      </div>
+                      <div className="p-3 bg-tertiary rounded">
+                        <div className="data-label">Put 1</div>
+                        <div className="data-value negative code-font">${result.putPrice1}</div>
+                      </div>
+                      <div className="p-3 bg-tertiary rounded">
+                        <div className="data-label">Call 2</div>
+                        <div className="data-value positive code-font">${result.callPrice2}</div>
+                      </div>
+                      <div className="p-3 bg-tertiary rounded">
+                        <div className="data-label">Put 2</div>
+                        <div className="data-value negative code-font">${result.putPrice2}</div>
                       </div>
                     </div>
                   </div>
                   
-                  {/* Results Panel */}
-                  <div className="slide-in-right">
-                    <div className="glass-card">
-                      <div className="flex items-center gap-3 mb-8">
-                        <div className="p-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl">
-                          <BarChart3 className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold gradient-text-accent">Results</h2>
-                          <p className="text-white/60">Forward volatility analysis</p>
-                        </div>
+                  {/* Calendar Spreads */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-secondary mb-2">Calendar Spreads</h3>
+                    <div className="trading-grid">
+                      <div className="p-3 bg-tertiary rounded border border-accent-green">
+                        <div className="data-label">Call Spread</div>
+                        <div className="data-value positive code-font">${result.callSpread}</div>
                       </div>
-                      
-                      {result ? (
-                        <div className="space-y-6">
-                          {result.error ? (
-                            <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200">
-                              {result.error}
-                            </div>
-                          ) : (
-                            <>
-                              {/* Forward Volatility */}
-                              <div className="p-6 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl border border-blue-500/30">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <h3 className="text-lg font-semibold text-white">Forward Volatility</h3>
-                                    <p className="text-white/60">Expected volatility between expirations</p>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="text-3xl font-bold gradient-text code-font">{result.forwardVol}%</div>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {/* Option Prices */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                                  <h4 className="text-sm font-medium text-white/80 mb-2">Call Price 1</h4>
-                                  <div className="text-xl font-bold text-green-400 code-font">${result.callPrice1}</div>
-                                </div>
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                                  <h4 className="text-sm font-medium text-white/80 mb-2">Put Price 1</h4>
-                                  <div className="text-xl font-bold text-red-400 code-font">${result.putPrice1}</div>
-                                </div>
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                                  <h4 className="text-sm font-medium text-white/80 mb-2">Call Price 2</h4>
-                                  <div className="text-xl font-bold text-green-400 code-font">${result.callPrice2}</div>
-                                </div>
-                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                                  <h4 className="text-sm font-medium text-white/80 mb-2">Put Price 2</h4>
-                                  <div className="text-xl font-bold text-red-400 code-font">${result.putPrice2}</div>
-                                </div>
-                              </div>
-                              
-                              {/* Calendar Spreads */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-xl border border-green-500/30">
-                                  <h4 className="text-sm font-medium text-white/80 mb-2">Call Spread</h4>
-                                  <div className="text-xl font-bold text-green-400 code-font">${result.callSpread}</div>
-                                </div>
-                                <div className="p-4 bg-gradient-to-r from-red-500/20 to-pink-500/20 rounded-xl border border-red-500/30">
-                                  <h4 className="text-sm font-medium text-white/80 mb-2">Put Spread</h4>
-                                  <div className="text-xl font-bold text-red-400 code-font">${result.putSpread}</div>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12">
-                          <div className="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
-                            <Calculator className="w-8 h-8 text-white/60" />
-                          </div>
-                          <p className="text-white/60">Enter parameters and click calculate to see results</p>
-                        </div>
-                      )}
+                      <div className="p-3 bg-tertiary rounded border border-accent-red">
+                        <div className="data-label">Put Spread</div>
+                        <div className="data-value negative code-font">${result.putSpread}</div>
+                      </div>
                     </div>
                   </div>
+                  
+                  {/* Greeks */}
+                  {result.greeks1 && result.greeks2 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-secondary mb-2">Greeks (Call Options)</h3>
+                      <div className="trading-table">
+                        <thead>
+                          <tr>
+                            <th>Greek</th>
+                            <th>Option 1</th>
+                            <th>Option 2</th>
+                            <th>Spread</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="code-font">Delta</td>
+                            <td className="code-font">{result.greeks1.delta.toFixed(4)}</td>
+                            <td className="code-font">{result.greeks2.delta.toFixed(4)}</td>
+                            <td className="code-font">{(result.greeks1.delta - result.greeks2.delta).toFixed(4)}</td>
+                          </tr>
+                          <tr>
+                            <td className="code-font">Gamma</td>
+                            <td className="code-font">{result.greeks1.gamma.toFixed(4)}</td>
+                            <td className="code-font">{result.greeks2.gamma.toFixed(4)}</td>
+                            <td className="code-font">{(result.greeks1.gamma - result.greeks2.gamma).toFixed(4)}</td>
+                          </tr>
+                          <tr>
+                            <td className="code-font">Theta</td>
+                            <td className="code-font">{result.greeks1.theta.toFixed(4)}</td>
+                            <td className="code-font">{result.greeks2.theta.toFixed(4)}</td>
+                            <td className="code-font">{(result.greeks1.theta - result.greeks2.theta).toFixed(4)}</td>
+                          </tr>
+                          <tr>
+                            <td className="code-font">Vega</td>
+                            <td className="code-font">{result.greeks1.vega.toFixed(4)}</td>
+                            <td className="code-font">{result.greeks2.vega.toFixed(4)}</td>
+                            <td className="code-font">{(result.greeks1.vega - result.greeks2.vega).toFixed(4)}</td>
+                          </tr>
+                        </tbody>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Risk Metrics */}
+                  {result.riskMetrics && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-secondary mb-2">Risk Analysis</h3>
+                      <div className="trading-grid">
+                        <div className="p-3 bg-tertiary rounded">
+                          <div className="data-label">Max Loss</div>
+                          <div className="data-value negative code-font">${result.riskMetrics.maxLoss}</div>
+                        </div>
+                        <div className="p-3 bg-tertiary rounded">
+                          <div className="data-label">Call Breakeven</div>
+                          <div className="data-value neutral code-font">${result.riskMetrics.breakevenPoints.call}</div>
+                        </div>
+                        <div className="p-3 bg-tertiary rounded">
+                          <div className="data-label">Put Breakeven</div>
+                          <div className="data-value neutral code-font">${result.riskMetrics.breakevenPoints.put}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </section>
-          </>
+              ) : (
+                <div className="text-center py-8">
+                  <Calculator className="w-12 h-12 text-muted mx-auto mb-4" />
+                  <p className="text-muted">Enter parameters and calculate to see results</p>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {activeTab === 'watchlist' && (
-          <section className="py-20 px-6">
-            <div className="max-w-6xl mx-auto">
-              <div className="glass-card">
-                <h2 className="text-3xl font-bold gradient-text mb-8">Watchlist</h2>
-                <p className="text-white/60">Your saved tickers and calculations will appear here.</p>
-              </div>
+          <div className="trading-card">
+            <div className="flex items-center gap-2 mb-4">
+              <Bookmark className="w-4 h-4 text-accent-yellow" />
+              <h2 className="text-lg font-semibold">Watchlist</h2>
             </div>
-          </section>
+            
+            {watchlist.length > 0 ? (
+              <div className="trading-table">
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th>Spot</th>
+                    <th>Strike</th>
+                    <th>Forward Vol</th>
+                    <th>Call Spread</th>
+                    <th>Put Spread</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {watchlist.map(item => (
+                    <tr key={item.id}>
+                      <td className="code-font font-semibold">{item.ticker}</td>
+                      <td className="code-font">${item.spotPrice}</td>
+                      <td className="code-font">${item.strikePrice}</td>
+                      <td className="code-font text-accent-blue">{item.forwardVol}%</td>
+                      <td className="code-font text-accent-green">${item.callSpread}</td>
+                      <td className="code-font text-accent-red">${item.putSpread}</td>
+                      <td className="code-font text-muted">{new Date(item.timestamp).toLocaleDateString()}</td>
+                      <td>
+                        <button className="p-1 rounded hover:bg-tertiary transition">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Bookmark className="w-12 h-12 text-muted mx-auto mb-4" />
+                <p className="text-muted">No items in watchlist</p>
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === 'history' && (
-          <section className="py-20 px-6">
-            <div className="max-w-6xl mx-auto">
-              <div className="glass-card">
-                <h2 className="text-3xl font-bold gradient-text mb-8">Calculation History</h2>
-                <p className="text-white/60">Your calculation history will appear here.</p>
-              </div>
+          <div className="trading-card">
+            <div className="flex items-center gap-2 mb-4">
+              <History className="w-4 h-4 text-accent-purple" />
+              <h2 className="text-lg font-semibold">Calculation History</h2>
             </div>
-          </section>
+            
+            {calculationHistory.length > 0 ? (
+              <div className="space-y-2">
+                {calculationHistory.map(item => (
+                  <div key={item.id} className="p-3 bg-tertiary rounded border">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="code-font font-semibold">{item.ticker}</span>
+                        <span className="text-muted">•</span>
+                        <span className="code-font text-accent-blue">{item.result.forwardVol}%</span>
+                      </div>
+                      <span className="text-xs text-muted">
+                        {new Date(item.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted">
+                      ${item.spotPrice} → ${item.strikePrice} | {item.date1} → {item.date2}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <History className="w-12 h-12 text-muted mx-auto mb-4" />
+                <p className="text-muted">No calculation history</p>
+              </div>
+            )}
+          </div>
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="py-12 px-6 border-t border-white/10">
-        <div className="max-w-6xl mx-auto text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <DollarSign className="w-6 h-6 text-green-400" />
-            <span className="text-xl font-bold gradient-text">Forward Volatility Calculator</span>
-          </div>
-          <p className="text-white/60">Professional options trading tools with beautiful design</p>
-        </div>
-      </footer>
     </div>
   );
 }
