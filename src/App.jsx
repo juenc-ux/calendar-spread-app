@@ -72,6 +72,7 @@ export default function ForwardVolCalculator() {
     const saved = localStorage.getItem(`watchlist_${currentUser}`);
     return saved ? JSON.parse(saved) : [];
   });
+  const [priceSource, setPriceSource] = useState('');
 
   // Reload user-specific data when user changes
   useEffect(() => {
@@ -284,36 +285,65 @@ export default function ForwardVolCalculator() {
       // Save API key to localStorage
       localStorage.setItem('polygonKey', apiKey);
 
-      // 1. Get current price (real-time data)
+      // 1. Get current price (real-time data from Tradier with Polygon fallback)
       const today = new Date();
-      const quoteUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${apiKey}`;
-      console.log('Fetching current price from Polygon.io...');
+      let currentPrice = null;
+      let priceSource = '';
 
-      const quoteResponse = await fetch(quoteUrl);
+      // Try Tradier API first for live data
+      try {
+        console.log('Fetching live price from Tradier API...');
+        const quoteUrl = `/api/tradier-quote?symbol=${symbol}`;
+        const quoteResponse = await fetch(quoteUrl);
 
-      if (!quoteResponse.ok) {
-        throw new Error(`API Error (${quoteResponse.status}). Check your API key.`);
+        if (quoteResponse.ok) {
+          const quoteData = await quoteResponse.json();
+          console.log('Tradier quote data:', quoteData);
+
+          if (quoteData.success && quoteData.price > 0) {
+            currentPrice = quoteData.price;
+            priceSource = 'Tradier (Live)';
+            console.log(`✅ Live price loaded: $${currentPrice.toFixed(2)} (${quoteData.change >= 0 ? '+' : ''}${quoteData.changePercentage?.toFixed(2)}%)`);
+          }
+        }
+      } catch (error) {
+        console.log('Tradier API failed, falling back to Polygon:', error.message);
       }
 
-      const quoteData = await quoteResponse.json();
-      console.log('Quote data:', quoteData);
+      // Fallback to Polygon.io if Tradier fails
+      if (!currentPrice) {
+        console.log('Fetching price from Polygon.io (fallback)...');
+        const quoteUrl = `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${apiKey}`;
+        const quoteResponse = await fetch(quoteUrl);
 
-      if (quoteData.status === 'ERROR') {
-        throw new Error(quoteData.error || 'Invalid ticker symbol');
-      }
+        if (!quoteResponse.ok) {
+          throw new Error(`API Error (${quoteResponse.status}). Check your API key.`);
+        }
 
-      if (!quoteData.results || quoteData.results.length === 0) {
-        throw new Error('No price data available for this ticker');
-      }
+        const quoteData = await quoteResponse.json();
+        console.log('Polygon quote data:', quoteData);
 
-      const result = quoteData.results[0];
-      const currentPrice = result.c; // closing price
+        if (quoteData.status === 'ERROR') {
+          throw new Error(quoteData.error || 'Invalid ticker symbol');
+        }
 
-      if (!currentPrice || currentPrice <= 0) {
-        throw new Error('No valid price data available');
+        if (!quoteData.results || quoteData.results.length === 0) {
+          throw new Error('No price data available for this ticker');
+        }
+
+        const result = quoteData.results[0];
+        currentPrice = result.c; // closing price
+        priceSource = 'Polygon (Previous Close)';
+
+        if (!currentPrice || currentPrice <= 0) {
+          throw new Error('No valid price data available');
+        }
+
+        console.log(`✅ Price loaded from ${priceSource}: $${currentPrice.toFixed(2)}`);
       }
 
       setSpotPrice(currentPrice.toFixed(2));
+      setPriceSource(priceSource);
 
       // 2. Get ticker details (market cap)
       try {
@@ -532,9 +562,6 @@ export default function ForwardVolCalculator() {
 
       // Auto-calculate after loading data
       setTimeout(() => calculateResults(), 100);
-
-      // Scan for best calendar spreads
-      setTimeout(() => scanCalendarSpreads(), 500);
 
       // Add to recent tickers on successful load
       addToRecentTickers(symbol);
@@ -1595,6 +1622,14 @@ export default function ForwardVolCalculator() {
     }
   }, [nextEarningsDate, earningsTime, date1, date2]);
 
+  // Trigger calendar spread scanning when availableExpirations is properly set
+  useEffect(() => {
+    if (ticker && apiKey && availableExpirations.length >= 2 && !scanningForSpreads && recommendedSpreads.length === 0) {
+      console.log('Triggering calendar spread scan after availableExpirations update');
+      setTimeout(() => scanCalendarSpreads(), 100);
+    }
+  }, [ticker, apiKey, availableExpirations, scanningForSpreads, recommendedSpreads.length]);
+
   const bgClass = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
   const cardClass = darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900';
   const borderClass = darkMode ? 'border-gray-700' : 'border-gray-200';
@@ -1760,19 +1795,37 @@ export default function ForwardVolCalculator() {
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => fetchOptionData(ticker)}
-                    disabled={loading}
-                    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                      loading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : darkMode
-                        ? 'bg-slate-600 hover:bg-slate-700 text-white'
-                        : 'bg-slate-500 hover:bg-slate-600 text-white'
-                    }`}
-                  >
-                    {loading ? '...' : 'Load'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => fetchOptionData(ticker)}
+                      disabled={loading}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        loading
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : darkMode
+                          ? 'bg-slate-600 hover:bg-slate-700 text-white'
+                          : 'bg-slate-500 hover:bg-slate-600 text-white'
+                      }`}
+                    >
+                      {loading ? '...' : 'Load'}
+                    </button>
+                    {ticker && spotPrice && (
+                      <button
+                        onClick={() => fetchOptionData(ticker)}
+                        disabled={loading}
+                        className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
+                          loading
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : darkMode
+                            ? 'bg-green-700 hover:bg-green-800 text-white'
+                            : 'bg-green-500 hover:bg-green-600 text-white'
+                        }`}
+                        title="Refresh live price"
+                      >
+                        🔄
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {loadError && (
                   <p className="text-red-500 text-xs mt-1">{loadError}</p>
@@ -2029,9 +2082,16 @@ export default function ForwardVolCalculator() {
                           <div className="flex items-baseline gap-2">
                         <span className="font-bold">{ticker}</span>
                             {spotPrice && (
-                              <span className={`text-lg font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                                ${parseFloat(spotPrice).toFixed(2)}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className={`text-lg font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                                  ${parseFloat(spotPrice).toFixed(2)}
+                                </span>
+                                {priceSource && (
+                                  <span className={`text-xs ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                                    📡 {priceSource}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                           <span className="text-[10px] opacity-50">Options data 15 min delayed, stock price last close</span>
