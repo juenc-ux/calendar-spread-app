@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Download, Moon, Sun, Sparkles, Zap, TrendingUp, BarChart3, Calculator, Settings, RefreshCw, ArrowRight, Star, Target, DollarSign } from 'lucide-react';
+import { Calendar, Download, Moon, Sun, Sparkles, Zap, TrendingUp, BarChart3, Calculator, Settings, RefreshCw, ArrowRight, Star, Target, DollarSign, Search, X, Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Clock, Users, Bookmark, History, Filter, Download as DownloadIcon } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 
 export default function ForwardVolCalculator() {
-  // State management
+  // All original state variables
   const [date1, setDate1] = useState('2025-10-24');
   const [date2, setDate2] = useState('2025-10-31');
   const [iv1, setIv1] = useState('50');
@@ -46,6 +46,36 @@ export default function ForwardVolCalculator() {
     return fridays;
   });
   const [marketCap, setMarketCap] = useState(null);
+  const [avgOptionsVolume, setAvgOptionsVolume] = useState(null);
+  const [recommendedSpreads, setRecommendedSpreads] = useState([]);
+  const [scanningForSpreads, setScanningForSpreads] = useState(false);
+  const [nextEarningsDate, setNextEarningsDate] = useState(null);
+  const [earningsTime, setEarningsTime] = useState(null);
+  const [earningsConflict, setEarningsConflict] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    return localStorage.getItem('currentUser') || 'Nils';
+  });
+  const [hidePostEarningsSpreads, setHidePostEarningsSpreads] = useState(false);
+  const [marketScanResults, setMarketScanResults] = useState([]);
+  const [loadingMarketScan, setLoadingMarketScan] = useState(false);
+  const [lastMarketScan, setLastMarketScan] = useState(null);
+  const [minOpenInterest, setMinOpenInterest] = useState(100);
+  const [minVolume, setMinVolume] = useState(0);
+  const [maxDTEGap, setMaxDTEGap] = useState(200);
+  const [recentTickers, setRecentTickers] = useState(() => {
+    const saved = localStorage.getItem(`recentTickers_${currentUser}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [watchlist, setWatchlist] = useState(() => {
+    const saved = localStorage.getItem(`watchlist_${currentUser}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  // UI state
+  const [activeTab, setActiveTab] = useState('calculator');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showWatchlist, setShowWatchlist] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   
   // Animation refs
   const heroRef = useRef(null);
@@ -61,8 +91,61 @@ export default function ForwardVolCalculator() {
     { symbol: 'NVDA', name: 'NVIDIA Corporation' },
     { symbol: 'META', name: 'Meta Platforms Inc.' },
     { symbol: 'TSLA', name: 'Tesla Inc.' },
+    { symbol: 'BRK.B', name: 'Berkshire Hathaway Inc.' },
+    { symbol: 'V', name: 'Visa Inc.' },
+    { symbol: 'JPM', name: 'JPMorgan Chase & Co.' },
+    { symbol: 'WMT', name: 'Walmart Inc.' },
+    { symbol: 'JNJ', name: 'Johnson & Johnson' },
+    { symbol: 'MA', name: 'Mastercard Inc.' },
+    { symbol: 'PG', name: 'Procter & Gamble Co.' },
+    { symbol: 'UNH', name: 'UnitedHealth Group Inc.' },
+    { symbol: 'HD', name: 'Home Depot Inc.' },
+    { symbol: 'DIS', name: 'Walt Disney Co.' },
+    { symbol: 'BAC', name: 'Bank of America Corp.' },
+    { symbol: 'ADBE', name: 'Adobe Inc.' },
+    { symbol: 'CRM', name: 'Salesforce Inc.' },
+    { symbol: 'NFLX', name: 'Netflix Inc.' },
+    { symbol: 'CMCSA', name: 'Comcast Corporation' },
+    { symbol: 'XOM', name: 'Exxon Mobil Corporation' },
+    { symbol: 'COST', name: 'Costco Wholesale Corp.' },
+    { symbol: 'PEP', name: 'PepsiCo Inc.' },
+    { symbol: 'TMO', name: 'Thermo Fisher Scientific Inc.' },
+    { symbol: 'ABT', name: 'Abbott Laboratories' },
+    { symbol: 'NKE', name: 'Nike Inc.' },
+    { symbol: 'CSCO', name: 'Cisco Systems Inc.' },
+    { symbol: 'ORCL', name: 'Oracle Corporation' },
+    { symbol: 'AMD', name: 'Advanced Micro Devices Inc.' },
+    { symbol: 'INTC', name: 'Intel Corporation' },
+    { symbol: 'QCOM', name: 'Qualcomm Inc.' },
+    { symbol: 'TXN', name: 'Texas Instruments Inc.' },
+    { symbol: 'AVGO', name: 'Broadcom Inc.' },
+    { symbol: 'CVX', name: 'Chevron Corporation' },
+    { symbol: 'KO', name: 'Coca-Cola Co.' },
+    { symbol: 'MCD', name: 'McDonald\'s Corporation' },
+    { symbol: 'PYPL', name: 'PayPal Holdings Inc.' },
+    { symbol: 'UBER', name: 'Uber Technologies Inc.' },
+    { symbol: 'BA', name: 'Boeing Co.' },
+    { symbol: 'CAT', name: 'Caterpillar Inc.' },
+    { symbol: 'GE', name: 'General Electric Co.' },
+    { symbol: 'F', name: 'Ford Motor Co.' },
+    { symbol: 'GM', name: 'General Motors Co.' },
+    { symbol: 'SBUX', name: 'Starbucks Corporation' },
+    { symbol: 'PLTR', name: 'Palantir Technologies Inc.' },
+    { symbol: 'COIN', name: 'Coinbase Global Inc.' },
+    { symbol: 'SQ', name: 'Block Inc.' },
+    { symbol: 'SNOW', name: 'Snowflake Inc.' },
     { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust' },
     { symbol: 'QQQ', name: 'Invesco QQQ Trust' },
+    { symbol: 'IWM', name: 'iShares Russell 2000 ETF' },
+    { symbol: 'DIA', name: 'SPDR Dow Jones Industrial Average ETF' },
+    { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF' },
+    { symbol: 'VOO', name: 'Vanguard S&P 500 ETF' },
+    { symbol: 'GLD', name: 'SPDR Gold Trust' },
+    { symbol: 'SLV', name: 'iShares Silver Trust' },
+    { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF' },
+    { symbol: 'XLE', name: 'Energy Select Sector SPDR Fund' },
+    { symbol: 'XLF', name: 'Financial Select Sector SPDR Fund' },
+    { symbol: 'XLK', name: 'Technology Select Sector SPDR Fund' },
   ];
 
   // Intersection Observer for animations
@@ -83,6 +166,14 @@ export default function ForwardVolCalculator() {
 
     return () => observer.disconnect();
   }, []);
+
+  // Reload user-specific data when user changes
+  useEffect(() => {
+    const savedWatchlist = localStorage.getItem(`watchlist_${currentUser}`);
+    const savedRecent = localStorage.getItem(`recentTickers_${currentUser}`);
+    setWatchlist(savedWatchlist ? JSON.parse(savedWatchlist) : []);
+    setRecentTickers(savedRecent ? JSON.parse(savedRecent) : []);
+  }, [currentUser]);
 
   // Black-Scholes calculation
   const calculateBlackScholes = (S, K, T, r, sigma, optionType) => {
@@ -165,6 +256,51 @@ export default function ForwardVolCalculator() {
     });
   };
 
+  // Ticker handling functions
+  const handleTickerChange = (value) => {
+    const upper = value.toUpperCase();
+    setTicker(upper);
+
+    if (upper.length > 0) {
+      const matches = popularStocks.filter(stock =>
+        stock.symbol.startsWith(upper) ||
+        stock.name.toUpperCase().includes(upper)
+      ).slice(0, 10);
+      setFilteredTickers(matches);
+      setShowTickerDropdown(matches.length > 0);
+    } else {
+      setFilteredTickers([]);
+      setShowTickerDropdown(false);
+    }
+  };
+
+  const selectTicker = (symbol) => {
+    setTicker(symbol);
+    setShowTickerDropdown(false);
+    setFilteredTickers([]);
+  };
+
+  const loadDemoData = () => {
+    setTicker('SPY');
+    setSpotPrice('580.25');
+    setStrikePrice('580');
+    setDate1('2025-10-24');
+    setDate2('2025-10-31');
+    setIv1('12.5');
+    setIv2('11.8');
+    setRiskFreeRate('4.5');
+    setDividend('1.2');
+    setTimeout(() => calculateForwardVol(), 100);
+  };
+
+  // Add ticker to recent tickers list
+  const addToRecentTickers = (symbol) => {
+    const upperSymbol = symbol.toUpperCase().trim();
+    const updated = [upperSymbol, ...recentTickers.filter(t => t !== upperSymbol)].slice(0, 6);
+    setRecentTickers(updated);
+    localStorage.setItem(`recentTickers_${currentUser}`, JSON.stringify(updated));
+  };
+
   // Particle system
   const ParticleSystem = () => {
     const [particles, setParticles] = useState([]);
@@ -205,326 +341,384 @@ export default function ForwardVolCalculator() {
       <Analytics />
       <ParticleSystem />
       
-      {/* Hero Section */}
-      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-pink-900/20"></div>
-        
-        <div className="relative z-10 text-center max-w-6xl mx-auto px-6">
-          <div className="fade-in">
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-6 py-3 mb-8 border border-white/20">
-              <Sparkles className="w-5 h-5 text-yellow-400" />
-              <span className="text-sm font-medium">Advanced Options Calculator</span>
-            </div>
-          </div>
-          
-          <h1 className="fade-in text-6xl md:text-8xl font-bold mb-6">
-            <span className="gradient-text">Forward Volatility</span>
-            <br />
-            <span className="gradient-text-secondary">Calculator</span>
-          </h1>
-          
-          <p className="fade-in text-xl md:text-2xl text-white/80 mb-12 max-w-3xl mx-auto leading-relaxed">
-            Calculate forward volatility and calendar spread strategies with precision. 
-            Advanced Black-Scholes modeling meets beautiful design.
-          </p>
-          
-          <div className="fade-in flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button 
-              onClick={calculateForwardVol}
-              className="btn-primary group flex items-center gap-3 text-lg px-8 py-4"
-            >
-              <Calculator className="w-6 h-6" />
-              Calculate Now
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </button>
-            
-            <button 
-              onClick={() => setDarkMode(!darkMode)}
-              className="btn-secondary group flex items-center gap-3 text-lg px-8 py-4"
-            >
-              {darkMode ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-              {darkMode ? 'Light Mode' : 'Dark Mode'}
-            </button>
-          </div>
-        </div>
-        
-        {/* Floating elements */}
-        <div className="absolute top-20 left-10 animate-bounce-slow">
-          <div className="glass w-16 h-16 rounded-full flex items-center justify-center">
-            <TrendingUp className="w-8 h-8 text-blue-400" />
-          </div>
-        </div>
-        
-        <div className="absolute bottom-20 right-10 animate-bounce-slow" style={{ animationDelay: '1s' }}>
-          <div className="glass w-20 h-20 rounded-full flex items-center justify-center">
-            <BarChart3 className="w-10 h-10 text-purple-400" />
-          </div>
-        </div>
-        
-        <div className="absolute top-1/2 left-20 animate-bounce-slow" style={{ animationDelay: '2s' }}>
-          <div className="glass w-12 h-12 rounded-full flex items-center justify-center">
-            <Target className="w-6 h-6 text-pink-400" />
-          </div>
-        </div>
-      </section>
-
-      {/* Main Calculator Section */}
-      <section className="relative py-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 items-start">
-            
-            {/* Input Panel */}
-            <div className="slide-in-left">
-              <div className="glass-card">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-                    <Settings className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold gradient-text">Parameters</h2>
-                    <p className="text-white/60">Enter your trading parameters</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-6">
-                  {/* Ticker Input */}
-                  <div>
-                    <label className="block text-sm font-medium text-white/80 mb-2">Ticker Symbol</label>
-                    <input
-                      type="text"
-                      value={ticker}
-                      onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                      placeholder="e.g., AAPL, MSFT, TSLA"
-                      className="input-field"
-                    />
-                  </div>
-                  
-                  {/* Spot Price */}
-                  <div>
-                    <label className="block text-sm font-medium text-white/80 mb-2">Spot Price ($)</label>
-                    <input
-                      type="number"
-                      value={spotPrice}
-                      onChange={(e) => setSpotPrice(e.target.value)}
-                      className="input-field"
-                      step="0.01"
-                    />
-                  </div>
-                  
-                  {/* Strike Price */}
-                  <div>
-                    <label className="block text-sm font-medium text-white/80 mb-2">Strike Price ($)</label>
-                    <input
-                      type="number"
-                      value={strikePrice}
-                      onChange={(e) => setStrikePrice(e.target.value)}
-                      className="input-field"
-                      step="0.01"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Date 1 */}
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">First Expiration</label>
-                      <input
-                        type="date"
-                        value={date1}
-                        onChange={(e) => setDate1(e.target.value)}
-                        className="input-field"
-                      />
-                    </div>
-                    
-                    {/* Date 2 */}
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">Second Expiration</label>
-                      <input
-                        type="date"
-                        value={date2}
-                        onChange={(e) => setDate2(e.target.value)}
-                        className="input-field"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* IV 1 */}
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">IV 1 (%)</label>
-                      <input
-                        type="number"
-                        value={iv1}
-                        onChange={(e) => setIv1(e.target.value)}
-                        className="input-field"
-                        step="0.1"
-                      />
-                    </div>
-                    
-                    {/* IV 2 */}
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">IV 2 (%)</label>
-                      <input
-                        type="number"
-                        value={iv2}
-                        onChange={(e) => setIv2(e.target.value)}
-                        className="input-field"
-                        step="0.1"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Risk-free Rate */}
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">Risk-free Rate (%)</label>
-                      <input
-                        type="number"
-                        value={riskFreeRate}
-                        onChange={(e) => setRiskFreeRate(e.target.value)}
-                        className="input-field"
-                        step="0.1"
-                      />
-                    </div>
-                    
-                    {/* Dividend */}
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">Dividend Yield (%)</label>
-                      <input
-                        type="number"
-                        value={dividend}
-                        onChange={(e) => setDividend(e.target.value)}
-                        className="input-field"
-                        step="0.1"
-                      />
-                    </div>
-                  </div>
-                </div>
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 glass backdrop-blur-md border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
+                <Calculator className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold gradient-text">Forward Vol Calculator</h1>
+                <p className="text-sm text-white/60 code-font">Advanced Options Analysis</p>
               </div>
             </div>
             
-            {/* Results Panel */}
-            <div className="slide-in-right">
-              <div className="glass-card">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl">
-                    <BarChart3 className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold gradient-text-accent">Results</h2>
-                    <p className="text-white/60">Forward volatility analysis</p>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setActiveTab('calculator')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'calculator' 
+                    ? 'bg-white/20 text-white' 
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                Calculator
+              </button>
+              <button
+                onClick={() => setActiveTab('watchlist')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'watchlist' 
+                    ? 'bg-white/20 text-white' 
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                Watchlist
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'history' 
+                    ? 'bg-white/20 text-white' 
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                History
+              </button>
+              
+              <button 
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-all"
+              >
+                {darkMode ? <Sun className="w-5 h-5 text-white" /> : <Moon className="w-5 h-5 text-white" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="pt-20">
+        {activeTab === 'calculator' && (
+          <>
+            {/* Hero Section */}
+            <section ref={heroRef} className="relative min-h-screen flex items-center justify-center overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-pink-900/20"></div>
+              
+              <div className="relative z-10 text-center max-w-6xl mx-auto px-6">
+                <div className="fade-in">
+                  <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-6 py-3 mb-8 border border-white/20">
+                    <Sparkles className="w-5 h-5 text-yellow-400" />
+                    <span className="text-sm font-medium">Advanced Options Calculator</span>
                   </div>
                 </div>
                 
-                {result ? (
-                  <div className="space-y-6">
-                    {result.error ? (
-                      <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200">
-                        {result.error}
+                <h1 className="fade-in text-6xl md:text-8xl font-bold mb-6">
+                  <span className="gradient-text">Forward Volatility</span>
+                  <br />
+                  <span className="gradient-text-secondary">Calculator</span>
+                </h1>
+                
+                <p className="fade-in text-xl md:text-2xl text-white/80 mb-12 max-w-3xl mx-auto leading-relaxed">
+                  Calculate forward volatility and calendar spread strategies with precision. 
+                  Advanced Black-Scholes modeling meets beautiful design.
+                </p>
+                
+                <div className="fade-in flex flex-col sm:flex-row gap-4 justify-center items-center">
+                  <button 
+                    onClick={calculateForwardVol}
+                    className="btn-primary group flex items-center gap-3 text-lg px-8 py-4"
+                  >
+                    <Calculator className="w-6 h-6" />
+                    Calculate Now
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                  
+                  <button 
+                    onClick={loadDemoData}
+                    className="btn-secondary group flex items-center gap-3 text-lg px-8 py-4"
+                  >
+                    <RefreshCw className="w-6 h-6" />
+                    Load Demo Data
+                  </button>
+                </div>
+              </div>
+              
+              {/* Floating elements */}
+              <div className="absolute top-20 left-10 animate-bounce-slow">
+                <div className="glass w-16 h-16 rounded-full flex items-center justify-center">
+                  <TrendingUp className="w-8 h-8 text-blue-400" />
+                </div>
+              </div>
+              
+              <div className="absolute bottom-20 right-10 animate-bounce-slow" style={{ animationDelay: '1s' }}>
+                <div className="glass w-20 h-20 rounded-full flex items-center justify-center">
+                  <BarChart3 className="w-10 h-10 text-purple-400" />
+                </div>
+              </div>
+              
+              <div className="absolute top-1/2 left-20 animate-bounce-slow" style={{ animationDelay: '2s' }}>
+                <div className="glass w-12 h-12 rounded-full flex items-center justify-center">
+                  <Target className="w-6 h-6 text-pink-400" />
+                </div>
+              </div>
+            </section>
+
+            {/* Calculator Section */}
+            <section className="relative py-20 px-6">
+              <div className="max-w-7xl mx-auto">
+                <div className="grid lg:grid-cols-2 gap-12 items-start">
+                  
+                  {/* Input Panel */}
+                  <div className="slide-in-left">
+                    <div className="glass-card">
+                      <div className="flex items-center gap-3 mb-8">
+                        <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
+                          <Settings className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold gradient-text">Parameters</h2>
+                          <p className="text-white/60">Enter your trading parameters</p>
+                        </div>
                       </div>
-                    ) : (
-                      <>
-                        {/* Forward Volatility */}
-                        <div className="p-6 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl border border-blue-500/30">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="text-lg font-semibold text-white">Forward Volatility</h3>
-                              <p className="text-white/60">Expected volatility between expirations</p>
+                      
+                      <div className="space-y-6">
+                        {/* Ticker Input */}
+                        <div className="relative">
+                          <label className="block text-sm font-medium text-white/80 mb-2">Ticker Symbol</label>
+                          <input
+                            type="text"
+                            value={ticker}
+                            onChange={(e) => handleTickerChange(e.target.value)}
+                            placeholder="e.g., AAPL, MSFT, TSLA"
+                            className="input-field code-font"
+                          />
+                          {showTickerDropdown && (
+                            <div className="absolute top-full left-0 right-0 mt-2 glass rounded-xl border border-white/20 max-h-60 overflow-y-auto z-10">
+                              {filteredTickers.map((stock) => (
+                                <button
+                                  key={stock.symbol}
+                                  onClick={() => selectTicker(stock.symbol)}
+                                  className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors border-b border-white/10 last:border-b-0"
+                                >
+                                  <div className="font-semibold text-white">{stock.symbol}</div>
+                                  <div className="text-sm text-white/60">{stock.name}</div>
+                                </button>
+                              ))}
                             </div>
-                            <div className="text-right">
-                              <div className="text-3xl font-bold gradient-text">{result.forwardVol}%</div>
-                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Spot Price */}
+                        <div>
+                          <label className="block text-sm font-medium text-white/80 mb-2">Spot Price ($)</label>
+                          <input
+                            type="number"
+                            value={spotPrice}
+                            onChange={(e) => setSpotPrice(e.target.value)}
+                            className="input-field code-font"
+                            step="0.01"
+                          />
+                        </div>
+                        
+                        {/* Strike Price */}
+                        <div>
+                          <label className="block text-sm font-medium text-white/80 mb-2">Strike Price ($)</label>
+                          <input
+                            type="number"
+                            value={strikePrice}
+                            onChange={(e) => setStrikePrice(e.target.value)}
+                            className="input-field code-font"
+                            step="0.01"
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Date 1 */}
+                          <div>
+                            <label className="block text-sm font-medium text-white/80 mb-2">First Expiration</label>
+                            <input
+                              type="date"
+                              value={date1}
+                              onChange={(e) => setDate1(e.target.value)}
+                              className="input-field code-font"
+                            />
+                          </div>
+                          
+                          {/* Date 2 */}
+                          <div>
+                            <label className="block text-sm font-medium text-white/80 mb-2">Second Expiration</label>
+                            <input
+                              type="date"
+                              value={date2}
+                              onChange={(e) => setDate2(e.target.value)}
+                              className="input-field code-font"
+                            />
                           </div>
                         </div>
                         
-                        {/* Option Prices */}
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                            <h4 className="text-sm font-medium text-white/80 mb-2">Call Price 1</h4>
-                            <div className="text-xl font-bold text-green-400">${result.callPrice1}</div>
+                          {/* IV 1 */}
+                          <div>
+                            <label className="block text-sm font-medium text-white/80 mb-2">IV 1 (%)</label>
+                            <input
+                              type="number"
+                              value={iv1}
+                              onChange={(e) => setIv1(e.target.value)}
+                              className="input-field code-font"
+                              step="0.1"
+                            />
                           </div>
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                            <h4 className="text-sm font-medium text-white/80 mb-2">Put Price 1</h4>
-                            <div className="text-xl font-bold text-red-400">${result.putPrice1}</div>
-                          </div>
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                            <h4 className="text-sm font-medium text-white/80 mb-2">Call Price 2</h4>
-                            <div className="text-xl font-bold text-green-400">${result.callPrice2}</div>
-                          </div>
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                            <h4 className="text-sm font-medium text-white/80 mb-2">Put Price 2</h4>
-                            <div className="text-xl font-bold text-red-400">${result.putPrice2}</div>
+                          
+                          {/* IV 2 */}
+                          <div>
+                            <label className="block text-sm font-medium text-white/80 mb-2">IV 2 (%)</label>
+                            <input
+                              type="number"
+                              value={iv2}
+                              onChange={(e) => setIv2(e.target.value)}
+                              className="input-field code-font"
+                              step="0.1"
+                            />
                           </div>
                         </div>
                         
-                        {/* Calendar Spreads */}
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-xl border border-green-500/30">
-                            <h4 className="text-sm font-medium text-white/80 mb-2">Call Spread</h4>
-                            <div className="text-xl font-bold text-green-400">${result.callSpread}</div>
+                          {/* Risk-free Rate */}
+                          <div>
+                            <label className="block text-sm font-medium text-white/80 mb-2">Risk-free Rate (%)</label>
+                            <input
+                              type="number"
+                              value={riskFreeRate}
+                              onChange={(e) => setRiskFreeRate(e.target.value)}
+                              className="input-field code-font"
+                              step="0.1"
+                            />
                           </div>
-                          <div className="p-4 bg-gradient-to-r from-red-500/20 to-pink-500/20 rounded-xl border border-red-500/30">
-                            <h4 className="text-sm font-medium text-white/80 mb-2">Put Spread</h4>
-                            <div className="text-xl font-bold text-red-400">${result.putSpread}</div>
+                          
+                          {/* Dividend */}
+                          <div>
+                            <label className="block text-sm font-medium text-white/80 mb-2">Dividend Yield (%)</label>
+                            <input
+                              type="number"
+                              value={dividend}
+                              onChange={(e) => setDividend(e.target.value)}
+                              className="input-field code-font"
+                              step="0.1"
+                            />
                           </div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
-                      <Calculator className="w-8 h-8 text-white/60" />
+                      </div>
                     </div>
-                    <p className="text-white/60">Enter parameters and click calculate to see results</p>
                   </div>
-                )}
+                  
+                  {/* Results Panel */}
+                  <div className="slide-in-right">
+                    <div className="glass-card">
+                      <div className="flex items-center gap-3 mb-8">
+                        <div className="p-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl">
+                          <BarChart3 className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold gradient-text-accent">Results</h2>
+                          <p className="text-white/60">Forward volatility analysis</p>
+                        </div>
+                      </div>
+                      
+                      {result ? (
+                        <div className="space-y-6">
+                          {result.error ? (
+                            <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200">
+                              {result.error}
+                            </div>
+                          ) : (
+                            <>
+                              {/* Forward Volatility */}
+                              <div className="p-6 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl border border-blue-500/30">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h3 className="text-lg font-semibold text-white">Forward Volatility</h3>
+                                    <p className="text-white/60">Expected volatility between expirations</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-3xl font-bold gradient-text code-font">{result.forwardVol}%</div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Option Prices */}
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                  <h4 className="text-sm font-medium text-white/80 mb-2">Call Price 1</h4>
+                                  <div className="text-xl font-bold text-green-400 code-font">${result.callPrice1}</div>
+                                </div>
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                  <h4 className="text-sm font-medium text-white/80 mb-2">Put Price 1</h4>
+                                  <div className="text-xl font-bold text-red-400 code-font">${result.putPrice1}</div>
+                                </div>
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                  <h4 className="text-sm font-medium text-white/80 mb-2">Call Price 2</h4>
+                                  <div className="text-xl font-bold text-green-400 code-font">${result.callPrice2}</div>
+                                </div>
+                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                  <h4 className="text-sm font-medium text-white/80 mb-2">Put Price 2</h4>
+                                  <div className="text-xl font-bold text-red-400 code-font">${result.putPrice2}</div>
+                                </div>
+                              </div>
+                              
+                              {/* Calendar Spreads */}
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-xl border border-green-500/30">
+                                  <h4 className="text-sm font-medium text-white/80 mb-2">Call Spread</h4>
+                                  <div className="text-xl font-bold text-green-400 code-font">${result.callSpread}</div>
+                                </div>
+                                <div className="p-4 bg-gradient-to-r from-red-500/20 to-pink-500/20 rounded-xl border border-red-500/30">
+                                  <h4 className="text-sm font-medium text-white/80 mb-2">Put Spread</h4>
+                                  <div className="text-xl font-bold text-red-400 code-font">${result.putSpread}</div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12">
+                          <div className="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center">
+                            <Calculator className="w-8 h-8 text-white/60" />
+                          </div>
+                          <p className="text-white/60">Enter parameters and click calculate to see results</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
+            </section>
+          </>
+        )}
 
-      {/* Features Section */}
-      <section className="py-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              <span className="gradient-text">Why Choose Our</span>
-              <br />
-              <span className="gradient-text-secondary">Calculator?</span>
-            </h2>
-            <p className="text-xl text-white/80 max-w-3xl mx-auto">
-              Advanced features designed for professional traders and options enthusiasts
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="scale-in glass-card text-center">
-              <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
-                <Zap className="w-8 h-8 text-white" />
+        {activeTab === 'watchlist' && (
+          <section className="py-20 px-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="glass-card">
+                <h2 className="text-3xl font-bold gradient-text mb-8">Watchlist</h2>
+                <p className="text-white/60">Your saved tickers and calculations will appear here.</p>
               </div>
-              <h3 className="text-xl font-bold mb-4 gradient-text">Lightning Fast</h3>
-              <p className="text-white/70">Instant calculations with real-time updates and smooth animations</p>
             </div>
-            
-            <div className="scale-in glass-card text-center">
-              <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center">
-                <Target className="w-8 h-8 text-white" />
+          </section>
+        )}
+
+        {activeTab === 'history' && (
+          <section className="py-20 px-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="glass-card">
+                <h2 className="text-3xl font-bold gradient-text mb-8">Calculation History</h2>
+                <p className="text-white/60">Your calculation history will appear here.</p>
               </div>
-              <h3 className="text-xl font-bold mb-4 gradient-text-secondary">Precision</h3>
-              <p className="text-white/70">Advanced Black-Scholes modeling for accurate forward volatility calculations</p>
             </div>
-            
-            <div className="scale-in glass-card text-center">
-              <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-pink-500 to-rose-600 rounded-2xl flex items-center justify-center">
-                <Star className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-4 gradient-text-accent">Beautiful Design</h3>
-              <p className="text-white/70">Stunning glassmorphism UI with smooth animations and modern aesthetics</p>
-            </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        )}
+      </main>
 
       {/* Footer */}
       <footer className="py-12 px-6 border-t border-white/10">
