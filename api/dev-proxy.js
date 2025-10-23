@@ -117,27 +117,83 @@ app.get('/api/earnings', async (req, res) => {
   }
 });
 
-// Proxy for Polygon.io API calls
-app.get('/api/polygon/*', async (req, res) => {
-  const polygonPath = req.path.replace('/api/polygon', '');
-  const polygonUrl = `https://api.polygon.io${polygonPath}`;
+// Note: Polygon.io API calls are made directly from the frontend
+
+// Tradier Quote endpoint
+app.get('/api/tradier-quote', async (req, res) => {
+  const { symbol } = req.query;
+
+  if (!symbol) {
+    return res.status(400).json({ error: 'Symbol parameter required' });
+  }
+
+  const upperSymbol = symbol.toUpperCase();
   
-  console.log('🔄 Proxying Polygon API call:', polygonUrl.replace(POLYGON_API_KEY, 'KEY_HIDDEN'));
-  
+  // Check cache first
+  const cached = cache.get(`tradier_${upperSymbol}`);
+  if (cached && Date.now() - cached.timestamp < 30000) { // 30s cache for live data
+    console.log('✅ Cache hit for Tradier quote:', upperSymbol);
+    return res.status(200).json(cached.data);
+  }
+
   try {
-    const response = await fetch(polygonUrl);
-    const data = await response.json();
+    console.log('📊 Fetching live quote for:', upperSymbol);
+
+    const TRADIER_ACCESS_TOKEN = 'bZKTXmHHRXsq1RdeyfKjQXahGyHu';
+    const tradierUrl = `https://api.tradier.com/v1/markets/quotes?symbols=${upperSymbol}`;
     
+    const response = await fetch(tradierUrl, {
+      headers: {
+        'Authorization': `Bearer ${TRADIER_ACCESS_TOKEN}`,
+        'Accept': 'application/json'
+      }
+    });
+
     if (!response.ok) {
-      console.error('❌ Polygon API error:', response.status, data);
-      return res.status(response.status).json(data);
+      throw new Error(`Tradier API error: ${response.status} ${response.statusText}`);
     }
+
+    const data = await response.json();
+    console.log('Tradier response:', data);
+
+    if (data.quotes && data.quotes.quote) {
+      const quote = Array.isArray(data.quotes.quote) ? data.quotes.quote[0] : data.quotes.quote;
+      
+      if (quote && quote.last) {
+        const responseData = {
+          success: true,
+          symbol: quote.symbol,
+          price: parseFloat(quote.last),
+          change: quote.change ? parseFloat(quote.change) : null,
+          changePercentage: quote.change_percentage ? parseFloat(quote.change_percentage) : null,
+          volume: quote.volume ? parseInt(quote.volume) : null,
+          high: quote.high ? parseFloat(quote.high) : null,
+          low: quote.low ? parseFloat(quote.low) : null,
+          open: quote.open ? parseFloat(quote.open) : null,
+          previousClose: quote.prevclose ? parseFloat(quote.prevclose) : null,
+          timestamp: new Date().toISOString()
+        };
+        
+        // Cache the result
+        cache.set(`tradier_${upperSymbol}`, { data: responseData, timestamp: Date.now() });
+        
+        return res.status(200).json(responseData);
+      }
+    }
+
+    const noQuoteData = {
+      success: false,
+      message: 'No quote data available for this symbol'
+    };
     
-    console.log('✅ Polygon API success:', data.status);
-    res.json(data);
+    return res.status(200).json(noQuoteData);
+
   } catch (error) {
-    console.error('❌ Polygon proxy error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error fetching Tradier quote:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
